@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import pickle
 import random
+import sys
 import time
 
 from PIL import Image
@@ -37,7 +38,7 @@ from yolact.utils.evaluation import *
 
 
 if __name__ == '__main__':
-    parse_args()
+    args = parse_args()
 
     if args.config is not None:
         set_cfg(args.config)
