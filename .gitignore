@@ -92,7 +92,7 @@ ENV/
 .remote-sync.json
 
 # weights
-weights/
+*.pth
 
 #DS_Store
 .DS_Store
