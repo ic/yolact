@@ -1,6 +1,8 @@
-from backbone import ResNetBackbone, VGGBackbone, ResNetBackboneGN, DarkNetBackbone
 from math import sqrt
+
 import torch
+
+from yolact.backbone import ResNetBackbone, VGGBackbone, ResNetBackboneGN, DarkNetBackbone
 
 # for making bounding boxes pretty
 COLORS = ((244,  67,  54),
@@ -109,11 +111,11 @@ dataset_base = Config({
     'name': 'Base Dataset',
 
     # Training images and annotations
-    'train_images': './data/coco/images/',
+    'train_images': './src/yolact/data/coco/images/',
     'train_info':   'path_to_annotation_file',
 
     # Validation images and annotations.
-    'valid_images': './data/coco/images/',
+    'valid_images': './src/yolact/data/coco/images/',
     'valid_info':   'path_to_annotation_file',
 
     # Whether or not to load GT. If this is False, eval.py quantitative evaluation won't work.
@@ -131,8 +133,8 @@ dataset_base = Config({
 coco2014_dataset = dataset_base.copy({
     'name': 'COCO 2014',
 
-    'train_info': './data/coco/annotations/instances_train2014.json',
-    'valid_info': './data/coco/annotations/instances_val2014.json',
+    'train_info': './src/yolact/data/coco/annotations/instances_train2014.json',
+    'valid_info': './src/yolact/data/coco/annotations/instances_val2014.json',
 
     'label_map': COCO_LABEL_MAP
 })
@@ -140,8 +142,8 @@ coco2014_dataset = dataset_base.copy({
 coco2017_dataset = dataset_base.copy({
     'name': 'COCO 2017',
 
-    'train_info': './data/coco/annotations/instances_train2017.json',
-    'valid_info': './data/coco/annotations/instances_val2017.json',
+    'train_info': './src/yolact/data/coco/annotations/instances_train2017.json',
+    'valid_info': './src/yolact/data/coco/annotations/instances_val2017.json',
 
     'label_map': COCO_LABEL_MAP
 })
@@ -149,7 +151,7 @@ coco2017_dataset = dataset_base.copy({
 coco2017_testdev_dataset = dataset_base.copy({
     'name': 'COCO 2017 Test-Dev',
 
-    'valid_info': './data/coco/annotations/image_info_test-dev2017.json',
+    'valid_info': './src/yolact/data/coco/annotations/image_info_test-dev2017.json',
     'has_gt': False,
 
     'label_map': COCO_LABEL_MAP
@@ -753,14 +755,14 @@ yolact_resnet50_config = yolact_base_config.copy({
 
 yolact_resnet50_pascal_config = yolact_resnet50_config.copy({
     'name': None, # Will default to yolact_resnet50_pascal
-    
+
     # Dataset stuff
     'dataset': pascal_sbd_dataset,
     'num_classes': len(pascal_sbd_dataset.class_names) + 1,
 
     'max_iter': 120000,
     'lr_steps': (60000, 100000),
-    
+
     'backbone': yolact_resnet50_config.backbone.copy({
         'pred_scales': [[32], [64], [128], [256], [512]],
         'use_square_anchors': False,

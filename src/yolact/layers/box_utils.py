@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 import torch
-from utils import timer
 
-from data import cfg
+from yolact.data import cfg
+from yolact.utils import timer
 
 @torch.jit.script
 def point_form(boxes):
@@ -130,11 +129,11 @@ def change(gt, priors):
     """
     Compute the d_change metric proposed in Box2Pix:
     https://lmb.informatik.uni-freiburg.de/Publications/2018/UB18/paper-box2pix.pdf
-    
+
     Input should be in point form (xmin, ymin, xmax, ymax).
 
     Output is of shape [num_gt, num_priors]
-    Note this returns -change so it can be a drop in replacement for 
+    Note this returns -change so it can be a drop in replacement for
     """
     num_priors = priors.size(0)
     num_gt     = gt.size(0)
@@ -176,7 +175,7 @@ def match(pos_thresh, neg_thresh, truths, priors, labels, crowd_boxes, loc_t, co
         The matched indices corresponding to 1)location and 2)confidence preds.
     """
     decoded_priors = decode(loc_data, priors, cfg.use_yolo_regressors) if cfg.use_prediction_matching else point_form(priors)
-    
+
     # Size [num_objects, num_priors]
     overlaps = jaccard(truths, decoded_priors) if not cfg.use_change_matching else change(truths, decoded_priors)
 
@@ -232,7 +231,7 @@ def encode(matched, priors, use_yolo_regressors:bool=False):
     Encode bboxes matched with each prior into the format
     produced by the network. See decode for more details on
     this format. Note that encode(decode(x, p), p) = x.
-    
+
     Args:
         - matched: A tensor of bboxes in point form with shape [num_priors, 4]
         - priors:  The tensor of all priors with shape [num_priors, 4]
@@ -261,7 +260,7 @@ def encode(matched, priors, use_yolo_regressors:bool=False):
         g_wh = torch.log(g_wh) / variances[1]
         # return target for smooth_l1_loss
         loc = torch.cat([g_cxcy, g_wh], 1)  # [num_priors,4]
-        
+
     return loc
 
 @torch.jit.script
@@ -274,21 +273,21 @@ def decode(loc, priors, use_yolo_regressors:bool=False):
         b_y = (sigmoid(pred_y) - .5) / conv_h + prior_y
         b_w = prior_w * exp(loc_w)
         b_h = prior_h * exp(loc_h)
-    
+
     Note that loc is inputed as [(s(x)-.5)/conv_w, (s(y)-.5)/conv_h, w, h]
     while priors are inputed as [x, y, w, h] where each coordinate
     is relative to size of the image (even sigmoid(x)). We do this
     in the network by dividing by the 'cell size', which is just
     the size of the convouts.
-    
+
     Also note that prior_x and prior_y are center coordinates which
     is why we have to subtract .5 from sigmoid(pred_x and pred_y).
-    
+
     Args:
         - loc:    The predicted bounding boxes of size [num_priors, 4]
         - priors: The priorbox coords with size [num_priors, 4]
-    
-    Returns: A tensor of decoded relative coordinates in point form 
+
+    Returns: A tensor of decoded relative coordinates in point form
              form with size [num_priors, 4]
     """
 
@@ -302,13 +301,13 @@ def decode(loc, priors, use_yolo_regressors:bool=False):
         boxes = point_form(boxes)
     else:
         variances = [0.1, 0.2]
-        
+
         boxes = torch.cat((
             priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:],
             priors[:, 2:] * torch.exp(loc[:, 2:] * variances[1])), 1)
         boxes[:, :2] -= boxes[:, 2:] / 2
         boxes[:, 2:] += boxes[:, :2]
-    
+
     return boxes
 
 
@@ -362,14 +361,14 @@ def crop(masks, boxes, padding:int=1):
 
     rows = torch.arange(w, device=masks.device, dtype=x1.dtype).view(1, -1, 1).expand(h, w, n)
     cols = torch.arange(h, device=masks.device, dtype=x1.dtype).view(-1, 1, 1).expand(h, w, n)
-    
+
     masks_left  = rows >= x1.view(1, 1, -1)
     masks_right = rows <  x2.view(1, 1, -1)
     masks_up    = cols >= y1.view(1, 1, -1)
     masks_down  = cols <  y2.view(1, 1, -1)
-    
+
     crop_mask = masks_left * masks_right * masks_up * masks_down
-    
+
     return masks * crop_mask.float()
 
 
@@ -379,7 +378,7 @@ def index2d(src, idx):
 
     In effect, this does
         out[i, j] = src[i, idx[i, j]]
-    
+
     Both src and idx should have the same size.
     """
 
