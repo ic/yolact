@@ -102,6 +102,7 @@ eval/
 eval.ipynb
 dev.ipynb
 .vscode/
+*.swp
 
 # not ready
 videos/
