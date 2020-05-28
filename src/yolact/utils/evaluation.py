@@ -18,8 +18,6 @@ import torch
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 
-# Add local Yolact to the search path.
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 from yolact.data import COCODetection, get_label_map, MEANS, COLORS
 from yolact.data import cfg, set_cfg, set_dataset
 from yolact.layers.box_utils import jaccard, center_size, mask_iou

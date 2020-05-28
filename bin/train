@@ -17,14 +17,15 @@ import torch.nn.init as init
 import torch.optim as optim
 import torch.utils.data as data
 
-# Oof
-# Note: Import before Yolact, as eval adds 'src' to the search path.
-import eval as eval_script
+# Add local Yolact to the search path.
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
+import pdb; pdb.set_trace()
 
 from yolact.data import *
 from yolact.layers.modules import MultiBoxLoss
 from yolact.utils import timer
 from yolact.utils.augmentations import SSDAugmentation, BaseTransform
+from yolact.utils import evaluation as eval_script
 from yolact.utils.functions import MovingAverage, SavePath
 from yolact.utils.logger import Log
 from yolact.yolact import Yolact
