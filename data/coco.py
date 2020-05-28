@@ -112,6 +112,8 @@ class COCODetection(data.Dataset):
             ann_ids = self.coco.getAnnIds(imgIds=img_id)
 
             # Target has {'segmentation', 'area', iscrowd', 'image_id', 'bbox', 'category_id'}
+            # HERE: This is where *different* annotations are gathered, each spotting 1 object
+            #       on the image.
             target = [x for x in self.coco.loadAnns(ann_ids) if x['image_id'] == img_id]
         else:
             target = []
