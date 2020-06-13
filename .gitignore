@@ -107,8 +107,8 @@ dev.ipynb
 # not ready
 videos/
 templates/
-data/ssd_dataloader.py
-data/datasets/
+src/yolact/data/ssd_dataloader.py
+src/yolact/data/datasets/
 doc/visualize.py
 read_results.py
 ssd300_120000/
@@ -122,9 +122,9 @@ test_data_aug.py
 .idea/
 
 # temp checkout soln
-data/coco
-data/sbd
-data/cityscapes
+src/yolact/data/coco
+src/yolact/data/sbd
+src/yolact/data/cityscapes
 
 # pylint
 .pylintrc
