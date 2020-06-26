@@ -406,76 +406,76 @@ class Yolact(nn.Module):
 
         self.cfg = cfg
 
-        self.backbone = construct_backbone(cfg.backbone)
+        self.backbone = construct_backbone(self.cfg.backbone)
 
-        if cfg.freeze_bn:
+        if self.cfg.freeze_bn:
             self.freeze_bn()
 
         # Compute mask_dim here and add it back to the config. Make sure Yolact's constructor is called early!
-        if cfg.mask_type == mask_type.direct:
-            cfg.mask_dim = cfg.mask_size**2
-        elif cfg.mask_type == mask_type.lincomb:
-            if cfg.mask_proto_use_grid:
-                self.grid = torch.Tensor(np.load(cfg.mask_proto_grid_file))
+        if self.cfg.mask_type == mask_type.direct:
+            self.cfg.mask_dim = self.cfg.mask_size**2
+        elif self.cfg.mask_type == mask_type.lincomb:
+            if self.cfg.mask_proto_use_grid:
+                self.grid = torch.Tensor(np.load(self.cfg.mask_proto_grid_file))
                 self.num_grids = self.grid.size(0)
             else:
                 self.num_grids = 0
 
-            self.proto_src = cfg.mask_proto_src
+            self.proto_src = self.cfg.mask_proto_src
 
             if self.proto_src is None: in_channels = 3
-            elif cfg.fpn is not None: in_channels = cfg.fpn.num_features
+            elif self.cfg.fpn is not None: in_channels = self.cfg.fpn.num_features
             else: in_channels = self.backbone.channels[self.proto_src]
             in_channels += self.num_grids
 
             # The include_last_relu=false here is because we might want to change it to another function
-            self.proto_net, cfg.mask_dim = make_net(in_channels, cfg.mask_proto_net, include_last_relu=False)
+            self.proto_net, self.cfg.mask_dim = make_net(in_channels, self.cfg.mask_proto_net, include_last_relu=False)
 
-            if cfg.mask_proto_bias:
-                cfg.mask_dim += 1
+            if self.cfg.mask_proto_bias:
+                self.cfg.mask_dim += 1
 
 
-        self.selected_layers = cfg.backbone.selected_layers
+        self.selected_layers = self.cfg.backbone.selected_layers
         src_channels = self.backbone.channels
 
-        if cfg.use_maskiou:
-            self.maskiou_net = FastMaskIoUNet(cfg)
+        if self.cfg.use_maskiou:
+            self.maskiou_net = FastMaskIoUNet(self.cfg)
 
-        if cfg.fpn is not None:
+        if self.cfg.fpn is not None:
             # Some hacky rewiring to accomodate the FPN
-            self.fpn = FPN(cfg, [src_channels[i] for i in self.selected_layers])
-            self.selected_layers = list(range(len(self.selected_layers) + cfg.fpn.num_downsample))
-            src_channels = [cfg.fpn.num_features] * len(self.selected_layers)
+            self.fpn = FPN(self.cfg, [src_channels[i] for i in self.selected_layers])
+            self.selected_layers = list(range(len(self.selected_layers) + self.cfg.fpn.num_downsample))
+            src_channels = [self.cfg.fpn.num_features] * len(self.selected_layers)
 
 
         self.prediction_layers = nn.ModuleList()
-        cfg.num_heads = len(self.selected_layers)
+        self.cfg.num_heads = len(self.selected_layers)
 
         for idx, layer_idx in enumerate(self.selected_layers):
             # If we're sharing prediction module weights, have every module's parent be the first one
             parent = None
-            if cfg.share_prediction_module and idx > 0:
+            if self.cfg.share_prediction_module and idx > 0:
                 parent = self.prediction_layers[0]
 
-            pred = PredictionModule(cfg, src_channels[layer_idx], src_channels[layer_idx],
-                                    aspect_ratios = cfg.backbone.pred_aspect_ratios[idx],
-                                    scales        = cfg.backbone.pred_scales[idx],
+            pred = PredictionModule(self.cfg, src_channels[layer_idx], src_channels[layer_idx],
+                                    aspect_ratios = self.cfg.backbone.pred_aspect_ratios[idx],
+                                    scales        = self.cfg.backbone.pred_scales[idx],
                                     parent        = parent,
                                     index         = idx)
             self.prediction_layers.append(pred)
 
         # Extra parameters for the extra losses
-        if cfg.use_class_existence_loss:
+        if self.cfg.use_class_existence_loss:
             # This comes from the smallest layer selected
-            # Also note that cfg.num_classes includes background
-            self.class_existence_fc = nn.Linear(src_channels[-1], cfg.num_classes - 1)
+            # Also note that self.cfg.num_classes includes background
+            self.class_existence_fc = nn.Linear(src_channels[-1], self.cfg.num_classes - 1)
 
-        if cfg.use_semantic_segmentation_loss:
-            self.semantic_seg_conv = nn.Conv2d(src_channels[0], cfg.num_classes-1, kernel_size=1)
+        if self.cfg.use_semantic_segmentation_loss:
+            self.semantic_seg_conv = nn.Conv2d(src_channels[0], self.cfg.num_classes-1, kernel_size=1)
 
         # For use in evaluation
-        self.detect = Detect(cfg.num_classes, bkg_label=0, top_k=cfg.nms_top_k,
-            conf_thresh=cfg.nms_conf_thresh, nms_thresh=cfg.nms_thresh)
+        self.detect = Detect(self.cfg.num_classes, bkg_label=0, top_k=self.cfg.nms_top_k,
+            conf_thresh=self.cfg.nms_conf_thresh, nms_thresh=self.cfg.nms_thresh)
 
     def save_weights(self, path):
         """ Saves the model's weights using compression because the file sizes were getting too big. """
