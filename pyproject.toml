@@ -7,14 +7,14 @@ authors = ["Your Name <you@example.com>"]
 [tool.poetry.dependencies]
 python = "^3.7"
 cython = "^0.29.17"
-opencv-python = "^4.2.0"
 pillow = "<7"
-pycocotools = "^2.0.0"
-matplotlib = "^3.2.1"
 torch = "^1.5.0"
 torchvision = "^0.6.0"
 
 [tool.poetry.dev-dependencies]
+matplotlib = "^3.2.1"
+opencv-python = "^4.2.0"
+pycocotools = "^2.0.0"
 
 [build-system]
 requires = ["poetry>=0.12"]
