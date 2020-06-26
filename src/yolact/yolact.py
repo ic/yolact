@@ -5,7 +5,6 @@ from typing import List
 
 import numpy as np
 import torch, torchvision
-import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models.resnet import Bottleneck
@@ -17,10 +16,13 @@ from yolact.layers.interpolate import InterpolateModule
 from yolact.utils import timer
 from yolact.utils.functions import MovingAverage, make_net
 
-# As of March 10, 2019, Pytorch DataParallel still doesn't support JIT Script Modules
-use_jit = torch.cuda.device_count() <= 1
-if not use_jit:
-    print('Multiple GPUs detected! Turning off JIT.')
+use_jit = True
+try:
+    # As of March 10, 2019, Pytorch DataParallel still doesn't support JIT Script Modules
+    use_jit = torch.cuda.device_count() <= 1
+except AssertionError:
+    if not use_jit:
+        print('Multiple GPUs detected! Turning off JIT.')
 
 ScriptModuleWrapper = torch.jit.ScriptModule if use_jit else nn.Module
 script_method_wrapper = torch.jit.script_method if use_jit else lambda fn, _rcn=None: fn
