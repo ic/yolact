@@ -85,12 +85,15 @@ if __name__ == '__main__':
             dataset = None
 
         print('Loading model...', end='')
-        net = Yolact()
-        net.load_weights(args.trained_model)
-        net.eval()
-        print(' Done.')
-
+        net = Yolact(cfg)
         if args.cuda:
+            net.load_weights(args.trained_model)
+            net.eval()
             net = net.cuda()
+        else:
+            weights = torch.load(args.trained_model, map_location=torch.device('cpu'))
+            net.load_state_dict(weights)
+            net.eval()
+        print(' Done.')
 
         evaluate(net, dataset)
