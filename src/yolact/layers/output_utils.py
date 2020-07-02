@@ -7,11 +7,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .box_utils import crop, sanitize_coordinates
-from yolact.data import cfg, mask_type, MEANS, STD, activation_func
+from yolact.data import MEANS, STD
+from yolact.data.configs.helpers import mask_type, activation_func
 from yolact.utils.augmentations import Resize
 from yolact.utils import timer
 
-def postprocess(det_output, w, h, batch_idx=0, interpolation_mode='bilinear',
+def postprocess(cfg, det_output, w, h, batch_idx=0, interpolation_mode='bilinear',
                 visualize_lincomb=False, crop_masks=True, score_threshold=0):
     """
     Postprocesses the output of Yolact on testing mode into a format that makes sense,
@@ -54,19 +55,19 @@ def postprocess(det_output, w, h, batch_idx=0, interpolation_mode='bilinear',
     scores  = dets['score']
     masks   = dets['mask']
 
-    if cfg.mask_type == mask_type.lincomb and cfg.eval_mask_branch:
+    if cfg['mask_type'] == mask_type.lincomb and cfg['eval_mask_branch']:
         # At this points masks is only the coefficients
         proto_data = dets['proto']
 
         # Test flag, do not upvote
-        if cfg.mask_proto_debug:
+        if cfg['mask_proto_debug']:
             np.save('scripts/proto.npy', proto_data.cpu().numpy())
 
         if visualize_lincomb:
             display_lincomb(proto_data, masks)
 
         masks = proto_data @ masks.t()
-        masks = cfg.mask_proto_mask_activation(masks)
+        masks = cfg['mask_proto_mask_activation'](masks)
 
         # Crop masks before upsampling because you know why
         if crop_masks:
@@ -75,13 +76,13 @@ def postprocess(det_output, w, h, batch_idx=0, interpolation_mode='bilinear',
         # Permute into the correct output shape [num_dets, proto_h, proto_w]
         masks = masks.permute(2, 0, 1).contiguous()
 
-        if cfg.use_maskiou:
+        if cfg['use_maskiou']:
             with timer.env('maskiou_net'):
                 with torch.no_grad():
                     maskiou_p = net.maskiou_net(masks.unsqueeze(1))
                     maskiou_p = torch.gather(maskiou_p, dim=1, index=classes.unsqueeze(1)).squeeze(1)
-                    if cfg.rescore_mask:
-                        if cfg.rescore_bbox:
+                    if cfg['rescore_mask']:
+                        if cfg['rescore_bbox']:
                             scores = scores * maskiou_p
                         else:
                             scores = [scores, scores * maskiou_p]
@@ -97,7 +98,7 @@ def postprocess(det_output, w, h, batch_idx=0, interpolation_mode='bilinear',
     boxes[:, 1], boxes[:, 3] = sanitize_coordinates(boxes[:, 1], boxes[:, 3], h, cast=False)
     boxes = boxes.long()
 
-    if cfg.mask_type == mask_type.direct and cfg.eval_mask_branch:
+    if cfg['mask_type'] == mask_type.direct and cfg['eval_mask_branch']:
         # Upscale masks
         full_masks = torch.zeros(masks.size(0), h, w)
 
@@ -111,7 +112,7 @@ def postprocess(det_output, w, h, batch_idx=0, interpolation_mode='bilinear',
             if mask_w * mask_h <= 0 or mask_w < 0:
                 continue
 
-            mask = masks[jdx, :].view(1, 1, cfg.mask_size, cfg.mask_size)
+            mask = masks[jdx, :].view(1, 1, cfg['mask_size'], cfg['mask_size'])
             mask = F.interpolate(mask, (mask_h, mask_w), mode=interpolation_mode, align_corners=False)
             mask = mask.gt(0.5).float()
             full_masks[jdx, y1:y2, x1:x2] = mask
@@ -132,9 +133,9 @@ def undo_image_transformation(img, w, h):
     img_numpy = img.permute(1, 2, 0).cpu().numpy()
     img_numpy = img_numpy[:, :, (2, 1, 0)] # To BRG
 
-    if cfg.backbone.transform.normalize:
+    if cfg['backbone'].transform.normalize:
         img_numpy = (img_numpy * np.array(STD) + np.array(MEANS)) / 255.0
-    elif cfg.backbone.transform.subtract_means:
+    elif cfg['backbone'].transform.subtract_means:
         img_numpy = (img_numpy / 255.0 + np.array(MEANS) / 255.0).astype(np.float32)
 
     img_numpy = img_numpy[:, :, (2, 1, 0)] # To RGB
@@ -145,7 +146,7 @@ def undo_image_transformation(img, w, h):
 
 def display_lincomb(proto_data, masks):
     out_masks = torch.matmul(proto_data, masks.t())
-    # out_masks = cfg.mask_proto_mask_activation(out_masks)
+    # out_masks = cfg['mask_proto_mask_activation'](out_masks)
 
     for kdx in range(1):
         jdx = kdx + 0
@@ -172,7 +173,7 @@ def display_lincomb(proto_data, masks):
                     running_total += proto_data[:, :, idx[i]].cpu().numpy() * coeffs_sort[i]
 
                 running_total_nonlin = running_total
-                if cfg.mask_proto_mask_activation == activation_func.sigmoid:
+                if cfg['mask_proto_mask_activation'] == activation_func.sigmoid:
                     running_total_nonlin = (1/(1+np.exp(-running_total_nonlin)))
 
                 arr_img[y*proto_h:(y+1)*proto_h, x*proto_w:(x+1)*proto_w] = (proto_data[:, :, idx[i]] / torch.max(proto_data[:, :, idx[i]])).cpu().numpy() * coeffs_sort[i]
