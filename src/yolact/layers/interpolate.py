@@ -8,10 +8,13 @@ class InterpolateModule(nn.Module):
 	"""
 
 	def __init__(self, *args, **kwdargs):
-		super().__init__()
+            super().__init__()
 
-		self.args = args
-		self.kwdargs = kwdargs
+            self.size = kwdargs.get('size', None)
+            self.scale_factor = kwdargs.get('scale_factor', None)
+            self.mode = kwdargs.get('mode', 'nearest')
+            self.align_corners = kwdargs.get('align_corners', None)
+            self.recompute_scale_factor = kwdargs.get('recompute_scale_factor', None)
 
 	def forward(self, x):
-		return F.interpolate(x, *self.args, **self.kwdargs)
+		return F.interpolate(x, size=self.size, scale_factor=self.scale_factor, mode=self.mode, align_corners=self.align_corners, recompute_scale_factor=self.recompute_scale_factor)

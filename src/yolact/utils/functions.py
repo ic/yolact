@@ -193,7 +193,7 @@ def make_net(in_channels, conf, include_last_relu=True):
                 layer = nn.Conv2d(in_channels, num_channels, kernel_size, **layer_cfg[2])
             else:
                 if num_channels is None:
-                    layer = InterpolateModule(scale_factor=-kernel_size, mode='bilinear', align_corners=False, **layer_cfg[2])
+                    layer = InterpolateModule(scale_factor=-float(kernel_size), mode='bilinear', align_corners=False, **layer_cfg[2])
                 else:
                     layer = nn.ConvTranspose2d(in_channels, num_channels, -kernel_size, **layer_cfg[2])
 
