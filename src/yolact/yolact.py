@@ -13,7 +13,6 @@ from yolact.backbone import construct_backbone
 from yolact.data.config import mask_type
 from yolact.layers import Detect
 from yolact.layers.interpolate import InterpolateModule
-from yolact.utils import timer
 from yolact.utils.functions import MovingAverage, make_net
 
 use_jit = True
@@ -217,49 +216,48 @@ class PredictionModule(nn.Module):
         global prior_cache
         size = (conv_h, conv_w)
 
-        with timer.env('makepriors'):
-            if self.last_img_size != (self.cfg._tmp_img_w, self.cfg._tmp_img_h):
-                prior_data = []
+        if self.last_img_size != (self.cfg._tmp_img_w, self.cfg._tmp_img_h):
+            prior_data = []
 
-                # Iteration order is important (it has to sync up with the convout)
-                for j, i in product(range(conv_h), range(conv_w)):
-                    # +0.5 because priors are in center-size notation
-                    x = (i + 0.5) / conv_w
-                    y = (j + 0.5) / conv_h
+            # Iteration order is important (it has to sync up with the convout)
+            for j, i in product(range(conv_h), range(conv_w)):
+                # +0.5 because priors are in center-size notation
+                x = (i + 0.5) / conv_w
+                y = (j + 0.5) / conv_h
 
-                    for ars in self.aspect_ratios:
-                        for scale in self.scales:
-                            for ar in ars:
-                                if not self.cfg.backbone.preapply_sqrt:
-                                    ar = sqrt(ar)
+                for ars in self.aspect_ratios:
+                    for scale in self.scales:
+                        for ar in ars:
+                            if not self.cfg.backbone.preapply_sqrt:
+                                ar = sqrt(ar)
 
-                                if self.cfg.backbone.use_pixel_scales:
-                                    w = scale * ar / self.cfg.max_size
-                                    h = scale / ar / self.cfg.max_size
-                                else:
-                                    w = scale * ar / conv_w
-                                    h = scale / ar / conv_h
+                            if self.cfg.backbone.use_pixel_scales:
+                                w = scale * ar / self.cfg.max_size
+                                h = scale / ar / self.cfg.max_size
+                            else:
+                                w = scale * ar / conv_w
+                                h = scale / ar / conv_h
 
-                                # This is for backward compatability with a bug where I made everything square by accident
-                                if self.cfg.backbone.use_square_anchors:
-                                    h = w
+                            # This is for backward compatability with a bug where I made everything square by accident
+                            if self.cfg.backbone.use_square_anchors:
+                                h = w
 
-                                prior_data += [x, y, w, h]
+                            prior_data += [x, y, w, h]
 
-                self.priors = torch.Tensor(prior_data, device=device).view(-1, 4).detach()
-                self.priors.requires_grad = False
-                self.last_img_size = (self.cfg._tmp_img_w, self.cfg._tmp_img_h)
-                self.last_conv_size = (conv_w, conv_h)
-                prior_cache[size] = None
-            elif self.priors.device != device:
-                # This whole weird situation is so that DataParalell doesn't copy the priors each iteration
-                if prior_cache[size] is None:
-                    prior_cache[size] = {}
+            self.priors = torch.Tensor(prior_data, device=device).view(-1, 4).detach()
+            self.priors.requires_grad = False
+            self.last_img_size = (self.cfg._tmp_img_w, self.cfg._tmp_img_h)
+            self.last_conv_size = (conv_w, conv_h)
+            prior_cache[size] = None
+        elif self.priors.device != device:
+            # This whole weird situation is so that DataParalell doesn't copy the priors each iteration
+            if prior_cache[size] is None:
+                prior_cache[size] = {}
 
-                if device not in prior_cache[size]:
-                    prior_cache[size][device] = self.priors.to(device)
+            if device not in prior_cache[size]:
+                prior_cache[size][device] = self.priors.to(device)
 
-                self.priors = prior_cache[size][device]
+            self.priors = prior_cache[size][device]
 
         return self.priors
 
@@ -574,68 +572,64 @@ class Yolact(nn.Module):
         self.cfg._tmp_img_h = img_h
         self.cfg._tmp_img_w = img_w
 
-        with timer.env('backbone'):
-            outs = self.backbone(x)
+        outs = self.backbone(x)
 
         if self.cfg.fpn is not None:
-            with timer.env('fpn'):
-                # Use backbone.selected_layers because we overwrote self.selected_layers
-                outs = [outs[i] for i in self.cfg.backbone.selected_layers]
-                outs = self.fpn(outs)
+            # Use backbone.selected_layers because we overwrote self.selected_layers
+            outs = [outs[i] for i in self.cfg.backbone.selected_layers]
+            outs = self.fpn(outs)
 
         proto_out = None
         if self.cfg.mask_type == mask_type.lincomb and self.cfg.eval_mask_branch:
-            with timer.env('proto'):
-                proto_x = x if self.proto_src is None else outs[self.proto_src]
+            proto_x = x if self.proto_src is None else outs[self.proto_src]
 
-                if self.num_grids > 0:
-                    grids = self.grid.repeat(proto_x.size(0), 1, 1, 1)
-                    proto_x = torch.cat([proto_x, grids], dim=1)
+            if self.num_grids > 0:
+                grids = self.grid.repeat(proto_x.size(0), 1, 1, 1)
+                proto_x = torch.cat([proto_x, grids], dim=1)
 
-                proto_out = self.proto_net(proto_x)
-                proto_out = self.cfg.mask_proto_prototype_activation(proto_out)
+            proto_out = self.proto_net(proto_x)
+            proto_out = self.cfg.mask_proto_prototype_activation(proto_out)
 
-                if self.cfg.mask_proto_prototypes_as_features:
-                    # Clone here because we don't want to permute this, though idk if contiguous makes this unnecessary
-                    proto_downsampled = proto_out.clone()
+            if self.cfg.mask_proto_prototypes_as_features:
+                # Clone here because we don't want to permute this, though idk if contiguous makes this unnecessary
+                proto_downsampled = proto_out.clone()
 
-                    if self.cfg.mask_proto_prototypes_as_features_no_grad:
-                        proto_downsampled = proto_out.detach()
+                if self.cfg.mask_proto_prototypes_as_features_no_grad:
+                    proto_downsampled = proto_out.detach()
 
-                # Move the features last so the multiplication is easy
-                proto_out = proto_out.permute(0, 2, 3, 1).contiguous()
+            # Move the features last so the multiplication is easy
+            proto_out = proto_out.permute(0, 2, 3, 1).contiguous()
 
-                if self.cfg.mask_proto_bias:
-                    bias_shape = [x for x in proto_out.size()]
-                    bias_shape[-1] = 1
-                    proto_out = torch.cat([proto_out, torch.ones(*bias_shape)], -1)
+            if self.cfg.mask_proto_bias:
+                bias_shape = [x for x in proto_out.size()]
+                bias_shape[-1] = 1
+                proto_out = torch.cat([proto_out, torch.ones(*bias_shape)], -1)
 
 
-        with timer.env('pred_heads'):
-            pred_outs = { 'loc': [], 'conf': [], 'mask': [], 'priors': [] }
+        pred_outs = { 'loc': [], 'conf': [], 'mask': [], 'priors': [] }
 
-            if self.cfg.use_mask_scoring:
-                pred_outs['score'] = []
+        if self.cfg.use_mask_scoring:
+            pred_outs['score'] = []
 
-            if self.cfg.use_instance_coeff:
-                pred_outs['inst'] = []
+        if self.cfg.use_instance_coeff:
+            pred_outs['inst'] = []
 
-            for idx, pred_layer in zip(self.selected_layers, self.prediction_layers):
-                pred_x = outs[idx]
+        for idx, pred_layer in zip(self.selected_layers, self.prediction_layers):
+            pred_x = outs[idx]
 
-                if self.cfg.mask_type == mask_type.lincomb and self.cfg.mask_proto_prototypes_as_features:
-                    # Scale the prototypes down to the current prediction layer's size and add it as inputs
-                    proto_downsampled = F.interpolate(proto_downsampled, size=outs[idx].size()[2:], mode='bilinear', align_corners=False)
-                    pred_x = torch.cat([pred_x, proto_downsampled], dim=1)
+            if self.cfg.mask_type == mask_type.lincomb and self.cfg.mask_proto_prototypes_as_features:
+                # Scale the prototypes down to the current prediction layer's size and add it as inputs
+                proto_downsampled = F.interpolate(proto_downsampled, size=outs[idx].size()[2:], mode='bilinear', align_corners=False)
+                pred_x = torch.cat([pred_x, proto_downsampled], dim=1)
 
-                # A hack for the way dataparallel works
-                if self.cfg.share_prediction_module and pred_layer is not self.prediction_layers[0]:
-                    pred_layer.parent = [self.prediction_layers[0]]
+            # A hack for the way dataparallel works
+            if self.cfg.share_prediction_module and pred_layer is not self.prediction_layers[0]:
+                pred_layer.parent = [self.prediction_layers[0]]
 
-                p = pred_layer(pred_x)
+            p = pred_layer(pred_x)
 
-                for k, v in p.items():
-                    pred_outs[k].append(v)
+            for k, v in p.items():
+                pred_outs[k].append(v)
 
         for k, v in pred_outs.items():
             pred_outs[k] = torch.cat(v, -2)
@@ -695,6 +689,8 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         from data.config import set_cfg
         set_cfg(sys.argv[1])
+        if cfg.name is None:
+            cfg.name = config_name.split('_config')[0]
 
     net = Yolact()
     net.train()
@@ -716,16 +712,11 @@ if __name__ == '__main__':
     exit()
 
     net(x)
-    # timer.disable('pass2')
     avg = MovingAverage()
     try:
         while True:
-            timer.reset()
-            with timer.env('everything else'):
-                net(x)
-            avg.add(timer.total_time())
+            net(x)
             print('\033[2J') # Moves console cursor to 0,0
-            timer.print_stats()
             print('Avg fps: %.2f\tAvg ms: %.2f         ' % (1/avg.get_avg(), avg.get_avg()*1000))
     except KeyboardInterrupt:
         pass
