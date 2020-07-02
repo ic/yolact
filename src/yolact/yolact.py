@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torchvision.models.resnet import Bottleneck
 
 from yolact.backbone import construct_backbone
-from yolact.data.config import mask_type
+from yolact.data.config.helpers import mask_types
 from yolact.layers import Detect
 from yolact.layers.interpolate import InterpolateModule
 from yolact.utils.functions import MovingAverage, make_net
@@ -73,39 +73,39 @@ class PredictionModule(nn.Module):
 
         self.cfg = cfg
 
-        self.num_classes = self.cfg.num_classes
-        self.mask_dim    = self.cfg.mask_dim # Defined by Yolact
+        self.num_classes = self.cfg['num_classes']
+        self.mask_dim    = self.cfg['mask_dim'] # Defined by Yolact
         self.num_priors  = sum(len(x)*len(scales) for x in aspect_ratios)
         self.parent      = [parent] # Don't include this in the state dict
         self.index       = index
-        self.num_heads   = self.cfg.num_heads # Defined by Yolact
+        self.num_heads   = self.cfg['num_heads'] # Defined by Yolact
 
-        if self.cfg.mask_proto_split_prototypes_by_head and self.cfg.mask_type == mask_type.lincomb:
+        if self.cfg['mask_proto_split_prototypes_by_head'] and self.cfg['mask_type'] == mask_types.lincomb:
             self.mask_dim = self.mask_dim // self.num_heads
 
-        if self.cfg.mask_proto_prototypes_as_features:
+        if self.cfg['mask_proto_prototypes_as_features']:
             in_channels += self.mask_dim
 
         if parent is None:
-            if self.cfg.extra_head_net is None:
+            if self.cfg['extra_head_net'] is None:
                 out_channels = in_channels
             else:
-                self.upfeature, out_channels = make_net(in_channels, self.cfg.extra_head_net)
+                self.upfeature, out_channels = make_net(in_channels, self.cfg['extra_head_net'])
 
-            if self.cfg.use_prediction_module:
+            if self.cfg['use_prediction_module']:
                 self.block = Bottleneck(out_channels, out_channels // 4)
                 self.conv = nn.Conv2d(out_channels, out_channels, kernel_size=1, bias=True)
                 self.bn = nn.BatchNorm2d(out_channels)
 
-            self.bbox_layer = nn.Conv2d(out_channels, self.num_priors * 4,                **self.cfg.head_layer_params)
-            self.conf_layer = nn.Conv2d(out_channels, self.num_priors * self.num_classes, **self.cfg.head_layer_params)
-            self.mask_layer = nn.Conv2d(out_channels, self.num_priors * self.mask_dim,    **self.cfg.head_layer_params)
+            self.bbox_layer = nn.Conv2d(out_channels, self.num_priors * 4,                **self.cfg['head_layer_params'])
+            self.conf_layer = nn.Conv2d(out_channels, self.num_priors * self.num_classes, **self.cfg['head_layer_params'])
+            self.mask_layer = nn.Conv2d(out_channels, self.num_priors * self.mask_dim,    **self.cfg['head_layer_params'])
 
-            if self.cfg.use_mask_scoring:
-                self.score_layer = nn.Conv2d(out_channels, self.num_priors, **self.cfg.head_layer_params)
+            if self.cfg['use_mask_scoring']:
+                self.score_layer = nn.Conv2d(out_channels, self.num_priors, **self.cfg['head_layer_params'])
 
-            if self.cfg.use_instance_coeff:
-                self.inst_layer = nn.Conv2d(out_channels, self.num_priors * self.cfg.num_instance_coeffs, **self.cfg.head_layer_params)
+            if self.cfg['use_instance_coeff']:
+                self.inst_layer = nn.Conv2d(out_channels, self.num_priors * self.cfg['num_instance_coeffs'], **self.cfg['head_layer_params'])
 
             # What is this ugly lambda doing in the middle of all this clean prediction module code?
             def make_extra(num_layers):
@@ -118,9 +118,9 @@ class PredictionModule(nn.Module):
                         nn.ReLU(inplace=True)
                     ] for _ in range(num_layers)], []))
 
-            self.bbox_extra, self.conf_extra, self.mask_extra = [make_extra(x) for x in self.cfg.extra_layers]
+            self.bbox_extra, self.conf_extra, self.mask_extra = [make_extra(x) for x in self.cfg['extra_layers']]
 
-            if self.cfg.mask_type == mask_type.lincomb and self.cfg.mask_proto_coeff_gate:
+            if self.cfg['mask_type'] == mask_types.lincomb and self.cfg['mask_proto_coeff_gate']:
                 self.gate_layer = nn.Conv2d(out_channels, self.num_priors * self.mask_dim, kernel_size=3, padding=1)
 
         self.aspect_ratios = aspect_ratios
@@ -148,10 +148,10 @@ class PredictionModule(nn.Module):
         conv_h = x.size(2)
         conv_w = x.size(3)
 
-        if self.cfg.extra_head_net is not None:
+        if self.cfg['extra_head_net'] is not None:
             x = src.upfeature(x)
 
-        if self.cfg.use_prediction_module:
+        if self.cfg['use_prediction_module']:
             # The two branches of PM design (c)
             a = src.block(x)
 
@@ -169,44 +169,44 @@ class PredictionModule(nn.Module):
         bbox = src.bbox_layer(bbox_x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, 4)
         conf = src.conf_layer(conf_x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.num_classes)
 
-        if self.cfg.eval_mask_branch:
+        if self.cfg['eval_mask_branch']:
             mask = src.mask_layer(mask_x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.mask_dim)
         else:
             mask = torch.zeros(x.size(0), bbox.size(1), self.mask_dim, device=bbox.device)
 
-        if self.cfg.use_mask_scoring:
+        if self.cfg['use_mask_scoring']:
             score = src.score_layer(x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, 1)
 
-        if self.cfg.use_instance_coeff:
-            inst = src.inst_layer(x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.cfg.num_instance_coeffs)
+        if self.cfg['use_instance_coeff']:
+            inst = src.inst_layer(x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.cfg['num_instance_coeffs'])
 
         # See box_utils.decode for an explanation of this
-        if self.cfg.use_yolo_regressors:
+        if self.cfg['use_yolo_regressors']:
             bbox[:, :, :2] = torch.sigmoid(bbox[:, :, :2]) - 0.5
             bbox[:, :, 0] /= conv_w
             bbox[:, :, 1] /= conv_h
 
-        if self.cfg.eval_mask_branch:
-            if self.cfg.mask_type == mask_type.direct:
+        if self.cfg['eval_mask_branch']:
+            if self.cfg['mask_type'] == mask_types.direct:
                 mask = torch.sigmoid(mask)
-            elif self.cfg.mask_type == mask_type.lincomb:
-                mask = self.cfg.mask_proto_coeff_activation(mask)
+            elif self.cfg['mask_type'] == mask_types.lincomb:
+                mask = self.cfg['mask_proto_coeff_activation'](mask)
 
-                if self.cfg.mask_proto_coeff_gate:
+                if self.cfg['mask_proto_coeff_gate']:
                     gate = src.gate_layer(x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.mask_dim)
                     mask = mask * torch.sigmoid(gate)
 
-        if self.cfg.mask_proto_split_prototypes_by_head and self.cfg.mask_type == mask_type.lincomb:
+        if self.cfg['mask_proto_split_prototypes_by_head'] and self.cfg['mask_type'] == mask_types.lincomb:
             mask = F.pad(mask, (self.index * self.mask_dim, (self.num_heads - self.index - 1) * self.mask_dim), mode='constant', value=0)
 
         priors = self.make_priors(conv_h, conv_w, x.device)
 
         preds = { 'loc': bbox, 'conf': conf, 'mask': mask, 'priors': priors }
 
-        if self.cfg.use_mask_scoring:
+        if self.cfg['use_mask_scoring']:
             preds['score'] = score
 
-        if self.cfg.use_instance_coeff:
+        if self.cfg['use_instance_coeff']:
             preds['inst'] = inst
 
         return preds
@@ -216,7 +216,7 @@ class PredictionModule(nn.Module):
         global prior_cache
         size = (conv_h, conv_w)
 
-        if self.last_img_size != (self.cfg._tmp_img_w, self.cfg._tmp_img_h):
+        if self.last_img_size != (self.cfg['_tmp_img_w'], self.cfg['_tmp_img_h']):
             prior_data = []
 
             # Iteration order is important (it has to sync up with the convout)
@@ -228,25 +228,25 @@ class PredictionModule(nn.Module):
                 for ars in self.aspect_ratios:
                     for scale in self.scales:
                         for ar in ars:
-                            if not self.cfg.backbone.preapply_sqrt:
+                            if not self.cfg['backbone']['preapply_sqrt']:
                                 ar = sqrt(ar)
 
-                            if self.cfg.backbone.use_pixel_scales:
-                                w = scale * ar / self.cfg.max_size
-                                h = scale / ar / self.cfg.max_size
+                            if self.cfg['backbone']['use_pixel_scales']:
+                                w = scale * ar / self.cfg['max_size']
+                                h = scale / ar / self.cfg['max_size']
                             else:
                                 w = scale * ar / conv_w
                                 h = scale / ar / conv_h
 
                             # This is for backward compatability with a bug where I made everything square by accident
-                            if self.cfg.backbone.use_square_anchors:
+                            if self.cfg['backbone']['use_square_anchors']:
                                 h = w
 
                             prior_data += [x, y, w, h]
 
             self.priors = torch.Tensor(prior_data, device=device).view(-1, 4).detach()
             self.priors.requires_grad = False
-            self.last_img_size = (self.cfg._tmp_img_w, self.cfg._tmp_img_h)
+            self.last_img_size = (self.cfg['_tmp_img_w'], self.cfg['_tmp_img_h'])
             self.last_conv_size = (conv_w, conv_h)
             prior_cache[size] = None
         elif self.priors.device != device:
@@ -266,7 +266,7 @@ class FPN(ScriptModuleWrapper):
     Implements a general version of the FPN introduced in
     https://arxiv.org/pdf/1612.03144.pdf
 
-    Parameters (in cfg.fpn):
+    Parameters (in cfg['fpn']):
         - num_features (int): The number of output features in the fpn layers.
         - interpolation_mode (str): The mode to pass to F.interpolate.
         - num_downsample (int): The number of downsampled layers to add onto the selected layers.
@@ -284,28 +284,28 @@ class FPN(ScriptModuleWrapper):
         super().__init__()
 
         self.lat_layers  = nn.ModuleList([
-            nn.Conv2d(x, cfg.fpn.num_features, kernel_size=1)
+            nn.Conv2d(x, cfg['fpn']['num_features'], kernel_size=1)
             for x in reversed(in_channels)
         ])
 
         # This is here for backwards compatability
-        padding = 1 if cfg.fpn.pad else 0
+        padding = 1 if cfg['fpn']['pad'] else 0
         self.pred_layers = nn.ModuleList([
-            nn.Conv2d(cfg.fpn.num_features, cfg.fpn.num_features, kernel_size=3, padding=padding)
+            nn.Conv2d(cfg['fpn']['num_features'], cfg['fpn']['num_features'], kernel_size=3, padding=padding)
             for _ in in_channels
         ])
 
-        if cfg.fpn.use_conv_downsample:
+        if cfg['fpn']['use_conv_downsample']:
             self.downsample_layers = nn.ModuleList([
-                nn.Conv2d(cfg.fpn.num_features, cfg.fpn.num_features, kernel_size=3, padding=1, stride=2)
-                for _ in range(cfg.fpn.num_downsample)
+                nn.Conv2d(cfg['fpn']['num_features'], cfg['fpn']['num_features'], kernel_size=3, padding=1, stride=2)
+                for _ in range(cfg['fpn']['num_downsample'])
             ])
 
-        self.interpolation_mode     = cfg.fpn.interpolation_mode
-        self.num_downsample         = cfg.fpn.num_downsample
-        self.use_conv_downsample    = cfg.fpn.use_conv_downsample
-        self.relu_downsample_layers = cfg.fpn.relu_downsample_layers
-        self.relu_pred_layers       = cfg.fpn.relu_pred_layers
+        self.interpolation_mode     = cfg['fpn']['interpolation_mode']
+        self.num_downsample         = cfg['fpn']['num_downsample']
+        self.use_conv_downsample    = cfg['fpn']['use_conv_downsample']
+        self.relu_downsample_layers = cfg['fpn']['relu_downsample_layers']
+        self.relu_pred_layers       = cfg['fpn']['relu_pred_layers']
 
     @script_method_wrapper
     def forward(self, convouts:List[torch.Tensor]):
@@ -365,8 +365,8 @@ class FastMaskIoUNet(ScriptModuleWrapper):
     def __init__(self, cfg):
         super().__init__()
         input_channels = 1
-        last_layer = [(cfg.num_classes-1, 1, {})]
-        self.maskiou_net, _ = make_net(input_channels, cfg.maskiou_net + last_layer, include_last_relu=True)
+        last_layer = [(cfg['num_classes']-1, 1, {})]
+        self.maskiou_net, _ = make_net(input_channels, cfg['maskiou_net'] + last_layer, include_last_relu=True)
 
     def forward(self, x):
         x = self.maskiou_net(x)
@@ -390,7 +390,7 @@ class Yolact(nn.Module):
 
     You can set the arguments by changing them in the backbone config object in config.py.
 
-    Parameters (in cfg.backbone):
+    Parameters (in cfg['backbone']):
         - selected_layers: The indices of the conv layers to use for prediction.
         - pred_scales:     A list with len(selected_layers) containing tuples of scales (see PredictionModule)
         - pred_aspect_ratios: A list of lists of aspect ratios with len(selected_layers) (see PredictionModule)
@@ -404,76 +404,76 @@ class Yolact(nn.Module):
 
         self.cfg = cfg
 
-        self.backbone = construct_backbone(self.cfg.backbone)
+        self.backbone = construct_backbone(self.cfg['backbone'])
 
-        if self.cfg.freeze_bn:
+        if self.cfg['freeze_bn']:
             self.freeze_bn()
 
         # Compute mask_dim here and add it back to the config. Make sure Yolact's constructor is called early!
-        if self.cfg.mask_type == mask_type.direct:
-            self.cfg.mask_dim = self.cfg.mask_size**2
-        elif self.cfg.mask_type == mask_type.lincomb:
-            if self.cfg.mask_proto_use_grid:
-                self.grid = torch.Tensor(np.load(self.cfg.mask_proto_grid_file))
+        if self.cfg['mask_type'] == mask_types.direct:
+            self.cfg['mask_dim'] = self.cfg['mask_size']**2
+        elif self.cfg['mask_type'] == mask_types.lincomb:
+            if self.cfg['mask_proto_use_grid']:
+                self.grid = torch.Tensor(np.load(self.cfg['mask_proto_grid_file']))
                 self.num_grids = self.grid.size(0)
             else:
                 self.num_grids = 0
 
-            self.proto_src = self.cfg.mask_proto_src
+            self.proto_src = self.cfg['mask_proto_src']
 
             if self.proto_src is None: in_channels = 3
-            elif self.cfg.fpn is not None: in_channels = self.cfg.fpn.num_features
+            elif self.cfg['fpn'] is not None: in_channels = self.cfg['fpn']['num_features']
             else: in_channels = self.backbone.channels[self.proto_src]
             in_channels += self.num_grids
 
             # The include_last_relu=false here is because we might want to change it to another function
-            self.proto_net, self.cfg.mask_dim = make_net(in_channels, self.cfg.mask_proto_net, include_last_relu=False)
+            self.proto_net, self.cfg['mask_dim'] = make_net(in_channels, self.cfg['mask_proto_net'], include_last_relu=False)
 
-            if self.cfg.mask_proto_bias:
-                self.cfg.mask_dim += 1
+            if self.cfg['mask_proto_bias']:
+                self.cfg['mask_dim'] += 1
 
 
-        self.selected_layers = self.cfg.backbone.selected_layers
+        self.selected_layers = self.cfg['backbone']['selected_layers']
         src_channels = self.backbone.channels
 
-        if self.cfg.use_maskiou:
+        if self.cfg['use_maskiou']:
             self.maskiou_net = FastMaskIoUNet(self.cfg)
 
-        if self.cfg.fpn is not None:
+        if self.cfg['fpn'] is not None:
             # Some hacky rewiring to accomodate the FPN
             self.fpn = FPN(self.cfg, [src_channels[i] for i in self.selected_layers])
-            self.selected_layers = list(range(len(self.selected_layers) + self.cfg.fpn.num_downsample))
-            src_channels = [self.cfg.fpn.num_features] * len(self.selected_layers)
+            self.selected_layers = list(range(len(self.selected_layers) + self.cfg['fpn']['num_downsample']))
+            src_channels = [self.cfg['fpn']['num_features']] * len(self.selected_layers)
 
 
         self.prediction_layers = nn.ModuleList()
-        self.cfg.num_heads = len(self.selected_layers)
+        self.cfg['num_heads'] = len(self.selected_layers)
 
         for idx, layer_idx in enumerate(self.selected_layers):
             # If we're sharing prediction module weights, have every module's parent be the first one
             parent = None
-            if self.cfg.share_prediction_module and idx > 0:
+            if self.cfg['share_prediction_module'] and idx > 0:
                 parent = self.prediction_layers[0]
 
             pred = PredictionModule(self.cfg, src_channels[layer_idx], src_channels[layer_idx],
-                                    aspect_ratios = self.cfg.backbone.pred_aspect_ratios[idx],
-                                    scales        = self.cfg.backbone.pred_scales[idx],
+                                    aspect_ratios = self.cfg['backbone']['pred_aspect_ratios'][idx],
+                                    scales        = self.cfg['backbone']['pred_scales'][idx],
                                     parent        = parent,
                                     index         = idx)
             self.prediction_layers.append(pred)
 
         # Extra parameters for the extra losses
-        if self.cfg.use_class_existence_loss:
+        if self.cfg['use_class_existence_loss']:
             # This comes from the smallest layer selected
-            # Also note that self.cfg.num_classes includes background
-            self.class_existence_fc = nn.Linear(src_channels[-1], self.cfg.num_classes - 1)
+            # Also note that self.cfg['num_classes'] includes background
+            self.class_existence_fc = nn.Linear(src_channels[-1], self.cfg['num_classes'] - 1)
 
-        if self.cfg.use_semantic_segmentation_loss:
-            self.semantic_seg_conv = nn.Conv2d(src_channels[0], self.cfg.num_classes-1, kernel_size=1)
+        if self.cfg['use_semantic_segmentation_loss']:
+            self.semantic_seg_conv = nn.Conv2d(src_channels[0], self.cfg['num_classes']-1, kernel_size=1)
 
         # For use in evaluation
-        self.detect = Detect(self.cfg.num_classes, bkg_label=0, top_k=self.cfg.nms_top_k,
-            conf_thresh=self.cfg.nms_conf_thresh, nms_thresh=self.cfg.nms_thresh)
+        self.detect = Detect(self.cfg['num_classes'], bkg_label=0, top_k=self.cfg['nms_top_k'],
+            conf_thresh=self.cfg['nms_conf_thresh'], nms_thresh=self.cfg['nms_thresh'])
 
     def save_weights(self, path):
         """ Saves the model's weights using compression because the file sizes were getting too big. """
@@ -490,7 +490,7 @@ class Yolact(nn.Module):
 
             # Also for backward compatibility with v1.0 weights, do this check
             if key.startswith('fpn.downsample_layers.'):
-                if self.cfg.fpn is not None and int(key.split('.')[2]) >= self.cfg.fpn.num_downsample:
+                if self.cfg['fpn'] is not None and int(key.split('.')[2]) >= self.cfg['fpn']['num_downsample']:
                     del state_dict[key]
         self.load_state_dict(state_dict)
 
@@ -531,8 +531,8 @@ class Yolact(nn.Module):
                 nn.init.xavier_uniform_(module.weight.data)
 
                 if module.bias is not None:
-                    if self.cfg.use_focal_loss and 'conf_layer' in name:
-                        if not self.cfg.use_sigmoid_focal_loss:
+                    if self.cfg['use_focal_loss'] and 'conf_layer' in name:
+                        if not self.cfg['use_sigmoid_focal_loss']:
                             # Initialize the last layer as in the focal loss paper.
                             # Because we use softmax and not sigmoid, I had to derive an alternate expression
                             # on a notecard. Define pi to be the probability of outputting a foreground detection.
@@ -543,18 +543,18 @@ class Yolact(nn.Module):
                             # For simplicity (and because we have a degree of freedom here), set z = 1. Then we have
                             #   x_0 =  log((1 - pi) / pi)       note: don't split up the log for numerical stability
                             #   x_i = -log(c)                   for all i > 0
-                            module.bias.data[0]  = np.log((1 - self.cfg.focal_loss_init_pi) / self.cfg.focal_loss_init_pi)
+                            module.bias.data[0]  = np.log((1 - self.cfg['focal_loss_init_pi']) / self.cfg['focal_loss_init_pi'])
                             module.bias.data[1:] = -np.log(module.bias.size(0) - 1)
                         else:
-                            module.bias.data[0]  = -np.log(self.cfg.focal_loss_init_pi / (1 - self.cfg.focal_loss_init_pi))
-                            module.bias.data[1:] = -np.log((1 - self.cfg.focal_loss_init_pi) / self.cfg.focal_loss_init_pi)
+                            module.bias.data[0]  = -np.log(self.cfg['focal_loss_init_pi'] / (1 - self.cfg['focal_loss_init_pi']))
+                            module.bias.data[1:] = -np.log((1 - self.cfg['focal_loss_init_pi']) / self.cfg['focal_loss_init_pi'])
                     else:
                         module.bias.data.zero_()
 
     def train(self, mode=True):
         super().train(mode)
 
-        if self.cfg.freeze_bn:
+        if self.cfg['freeze_bn']:
             self.freeze_bn()
 
     def freeze_bn(self, enable=False):
@@ -569,18 +569,18 @@ class Yolact(nn.Module):
     def forward(self, x):
         """ The input should be of size [batch_size, 3, img_h, img_w] """
         _, _, img_h, img_w = x.size()
-        self.cfg._tmp_img_h = img_h
-        self.cfg._tmp_img_w = img_w
+        self.cfg['_tmp_img_h'] = img_h
+        self.cfg['_tmp_img_w'] = img_w
 
         outs = self.backbone(x)
 
-        if self.cfg.fpn is not None:
+        if self.cfg['fpn'] is not None:
             # Use backbone.selected_layers because we overwrote self.selected_layers
-            outs = [outs[i] for i in self.cfg.backbone.selected_layers]
+            outs = [outs[i] for i in self.cfg['backbone']['selected_layers']]
             outs = self.fpn(outs)
 
         proto_out = None
-        if self.cfg.mask_type == mask_type.lincomb and self.cfg.eval_mask_branch:
+        if self.cfg['mask_type'] == mask_types.lincomb and self.cfg['eval_mask_branch']:
             proto_x = x if self.proto_src is None else outs[self.proto_src]
 
             if self.num_grids > 0:
@@ -588,19 +588,19 @@ class Yolact(nn.Module):
                 proto_x = torch.cat([proto_x, grids], dim=1)
 
             proto_out = self.proto_net(proto_x)
-            proto_out = self.cfg.mask_proto_prototype_activation(proto_out)
+            proto_out = self.cfg['mask_proto_prototype_activation'](proto_out)
 
-            if self.cfg.mask_proto_prototypes_as_features:
+            if self.cfg['mask_proto_prototypes_as_features']:
                 # Clone here because we don't want to permute this, though idk if contiguous makes this unnecessary
                 proto_downsampled = proto_out.clone()
 
-                if self.cfg.mask_proto_prototypes_as_features_no_grad:
+                if self.cfg['mask_proto_prototypes_as_features_no_grad']:
                     proto_downsampled = proto_out.detach()
 
             # Move the features last so the multiplication is easy
             proto_out = proto_out.permute(0, 2, 3, 1).contiguous()
 
-            if self.cfg.mask_proto_bias:
+            if self.cfg['mask_proto_bias']:
                 bias_shape = [x for x in proto_out.size()]
                 bias_shape[-1] = 1
                 proto_out = torch.cat([proto_out, torch.ones(*bias_shape)], -1)
@@ -608,22 +608,22 @@ class Yolact(nn.Module):
 
         pred_outs = { 'loc': [], 'conf': [], 'mask': [], 'priors': [] }
 
-        if self.cfg.use_mask_scoring:
+        if self.cfg['use_mask_scoring']:
             pred_outs['score'] = []
 
-        if self.cfg.use_instance_coeff:
+        if self.cfg['use_instance_coeff']:
             pred_outs['inst'] = []
 
         for idx, pred_layer in zip(self.selected_layers, self.prediction_layers):
             pred_x = outs[idx]
 
-            if self.cfg.mask_type == mask_type.lincomb and self.cfg.mask_proto_prototypes_as_features:
+            if self.cfg['mask_type'] == mask_types.lincomb and self.cfg['mask_proto_prototypes_as_features']:
                 # Scale the prototypes down to the current prediction layer's size and add it as inputs
                 proto_downsampled = F.interpolate(proto_downsampled, size=outs[idx].size()[2:], mode='bilinear', align_corners=False)
                 pred_x = torch.cat([pred_x, proto_downsampled], dim=1)
 
             # A hack for the way dataparallel works
-            if self.cfg.share_prediction_module and pred_layer is not self.prediction_layers[0]:
+            if self.cfg['share_prediction_module'] and pred_layer is not self.prediction_layers[0]:
                 pred_layer.parent = [self.prediction_layers[0]]
 
             p = pred_layer(pred_x)
@@ -639,24 +639,24 @@ class Yolact(nn.Module):
 
         if self.training:
             # For the extra loss functions
-            if self.cfg.use_class_existence_loss:
+            if self.cfg['use_class_existence_loss']:
                 pred_outs['classes'] = self.class_existence_fc(outs[-1].mean(dim=(2, 3)))
 
-            if self.cfg.use_semantic_segmentation_loss:
+            if self.cfg['use_semantic_segmentation_loss']:
                 pred_outs['segm'] = self.semantic_seg_conv(outs[0])
 
             return pred_outs
         else:
-            if self.cfg.use_mask_scoring:
+            if self.cfg['use_mask_scoring']:
                 pred_outs['score'] = torch.sigmoid(pred_outs['score'])
 
-            if self.cfg.use_focal_loss:
-                if self.cfg.use_sigmoid_focal_loss:
+            if self.cfg['use_focal_loss']:
+                if self.cfg['use_sigmoid_focal_loss']:
                     # Note: even though conf[0] exists, this mode doesn't train it so don't use it
                     pred_outs['conf'] = torch.sigmoid(pred_outs['conf'])
-                    if self.cfg.use_mask_scoring:
+                    if self.cfg['use_mask_scoring']:
                         pred_outs['conf'] *= pred_outs['score']
-                elif self.cfg.use_objectness_score:
+                elif self.cfg['use_objectness_score']:
                     # See focal_loss_sigmoid in multibox_loss.py for details
                     objectness = torch.sigmoid(pred_outs['conf'][:, :, 0])
                     pred_outs['conf'][:, :, 1:] = objectness[:, :, None] * F.softmax(pred_outs['conf'][:, :, 1:], -1)
@@ -665,7 +665,7 @@ class Yolact(nn.Module):
                     pred_outs['conf'] = F.softmax(pred_outs['conf'], -1)
             else:
 
-                if self.cfg.use_objectness_score:
+                if self.cfg['use_objectness_score']:
                     objectness = torch.sigmoid(pred_outs['conf'][:, :, 0])
 
                     pred_outs['conf'][:, :, 1:] = (objectness > 0.10)[..., None] \
@@ -687,20 +687,21 @@ if __name__ == '__main__':
     # Use the first argument to set the config if you want
     import sys
     if len(sys.argv) > 1:
-        from data.config import set_cfg
-        set_cfg(sys.argv[1])
-        if cfg.name is None:
-            cfg.name = config_name.split('_config')[0]
+        from data import load_config
+        cfg = load_config(sys.argv[1])
+    else:
+        cfg = load_config('yolact_base')
 
-    net = Yolact()
+    net = Yolact(cfg)
     net.train()
-    net.init_weights(backbone_path='weights/' + cfg.backbone.path)
+    net.init_weights(backbone_path='weights/' + cfg['backbone']['path'])
 
     # GPU
-    net = net.cuda()
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    if torch.cuda.is_available():
+        net = net.cuda()
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
-    x = torch.zeros((1, 3, cfg.max_size, cfg.max_size))
+    x = torch.zeros((1, 3, cfg['max_size'], cfg['max_size']))
     y = net(x)
 
     for p in net.prediction_layers:

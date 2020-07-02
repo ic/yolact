@@ -41,7 +41,7 @@ config = {
     'nms_thresh': 0.5,
 
     # See mask_type for details.
-    'mask_type': mask_type.direct,
+    'mask_type': mask_types.direct,
     'mask_size': 16,
     'masks_to_train': 100,
     'mask_proto_src': None,

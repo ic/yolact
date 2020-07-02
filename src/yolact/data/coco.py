@@ -6,15 +6,14 @@ import torch.utils.data as data
 import torch.nn.functional as F
 import cv2
 import numpy as np
-from .config import cfg
 from pycocotools import mask as maskUtils
 import random
 
-def get_label_map():
-    if cfg.dataset.label_map is None:
-        return {x+1: x+1 for x in range(len(cfg.dataset.class_names))}
+def get_label_map(cfg):
+    if cfg['dataset']['label_map'] is None:
+        return {x+1: x+1 for x in range(len(cfg['dataset']['class_names']))}
     else:
-        return cfg.dataset.label_map
+        return cfg['dataset']['label_map']
 
 class COCOAnnotationTransform(object):
     """Transforms a COCO annotation into a Tensor of bbox coords and label index

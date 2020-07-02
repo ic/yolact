@@ -29,3 +29,10 @@ COLORS = ((244,  67,  54),
 # These are in BGR and are for ImageNet
 MEANS = (103.94, 116.78, 123.68)
 STD   = (57.38, 57.12, 58.40)
+
+def load_config(name:str) -> dict:
+    try:
+        mod = __import__(f'yolact.data.configs.{name}', fromlist=[''])
+        return mod.config
+    except ModuleNotFoundError:
+        raise Exception(f'Configuration {name} not found.')

@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 from ..box_utils import match, log_sum_exp, decode, center_size, crop, elemwise_mask_iou, elemwise_box_iou
-from yolact.data import cfg, mask_type, activation_func
+from yolact.data.configs.helpers import mask_types, activation_func
 
 class MultiBoxLoss(nn.Module):
     """SSD Weighted Loss Function
@@ -75,7 +75,7 @@ class MultiBoxLoss(nn.Module):
         mask_data = predictions['mask']
         priors    = predictions['priors']
 
-        if cfg.mask_type == mask_type.lincomb:
+        if cfg.mask_type == mask_types.lincomb:
             proto_data = predictions['proto']
 
         score_data = predictions['score'] if cfg.use_mask_scoring   else None
@@ -145,7 +145,7 @@ class MultiBoxLoss(nn.Module):
             losses['B'] = F.smooth_l1_loss(loc_p, loc_t, reduction='sum') * cfg.bbox_alpha
 
         if cfg.train_masks:
-            if cfg.mask_type == mask_type.direct:
+            if cfg.mask_type == mask_types.direct:
                 if cfg.use_gt_bboxes:
                     pos_masks = []
                     for idx in range(batch_size):
@@ -155,7 +155,7 @@ class MultiBoxLoss(nn.Module):
                     losses['M'] = F.binary_cross_entropy(torch.clamp(masks_p, 0, 1), masks_t, reduction='sum') * cfg.mask_alpha
                 else:
                     losses['M'] = self.direct_mask_loss(pos_idx, idx_t, loc_data, mask_data, priors, masks)
-            elif cfg.mask_type == mask_type.lincomb:
+            elif cfg.mask_type == mask_types.lincomb:
                 ret = self.lincomb_mask_loss(pos, idx_t, loc_data, mask_data, priors, proto_data, masks, gt_box_t, score_data, inst_data, labels)
                 if cfg.use_maskiou:
                     loss, maskiou_targets = ret

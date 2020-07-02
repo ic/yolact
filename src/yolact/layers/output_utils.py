@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 from .box_utils import crop, sanitize_coordinates
 from yolact.data import MEANS, STD
-from yolact.data.configs.helpers import mask_type, activation_func
+from yolact.data.configs.helpers import mask_types, activation_func
 from yolact.utils.augmentations import Resize
 from yolact.utils import timer
 
@@ -55,7 +55,7 @@ def postprocess(cfg, det_output, w, h, batch_idx=0, interpolation_mode='bilinear
     scores  = dets['score']
     masks   = dets['mask']
 
-    if cfg['mask_type'] == mask_type.lincomb and cfg['eval_mask_branch']:
+    if cfg['mask_type'] == mask_types.lincomb and cfg['eval_mask_branch']:
         # At this points masks is only the coefficients
         proto_data = dets['proto']
 
@@ -98,7 +98,7 @@ def postprocess(cfg, det_output, w, h, batch_idx=0, interpolation_mode='bilinear
     boxes[:, 1], boxes[:, 3] = sanitize_coordinates(boxes[:, 1], boxes[:, 3], h, cast=False)
     boxes = boxes.long()
 
-    if cfg['mask_type'] == mask_type.direct and cfg['eval_mask_branch']:
+    if cfg['mask_type'] == mask_types.direct and cfg['eval_mask_branch']:
         # Upscale masks
         full_masks = torch.zeros(masks.size(0), h, w)
 

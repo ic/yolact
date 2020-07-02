@@ -1,5 +1,5 @@
 from yolact.data.configs.backbones import resnet101_dcn_inter3_backbone, resnet50_dcnv2_backbone
-from yolact.data.configs.yolact_base import yolact_base_config
+from yolact.data.configs import yolact_base
 
 yolact_plus_base_backbone = resnet101_dcn_inter3_backbone.copy()
 yolact_plus_base_backbone.update({
@@ -11,7 +11,7 @@ yolact_plus_base_backbone.update({
     'use_square_anchors': False,
 })
 
-yolact_plus_base_config = yolact_base_config.copy()
+yolact_plus_base_config = yolact_base.config.copy()
 yolact_plus_base_config.udpate({
     'name': 'yolact_plus_base',
 

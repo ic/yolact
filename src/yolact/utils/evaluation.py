@@ -19,7 +19,6 @@ from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 
 from yolact.data import COCODetection, get_label_map, MEANS, COLORS
-from yolact.data import cfg, set_cfg, set_dataset
 from yolact.layers.box_utils import jaccard, center_size, mask_iou
 from yolact.layers.output_utils import postprocess, undo_image_transformation
 from yolact.utils import timer
@@ -134,7 +133,7 @@ coco_cats = {} # Call prep_coco_cats to fill this
 coco_cats_inv = {}
 color_cache = defaultdict(lambda: {})
 
-def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, mask_alpha=0.45, fps_str=''):
+def prep_display(cfg, dets_out, img, h, w, undo_transform=True, class_color=False, mask_alpha=0.45, fps_str=''):
     """
     Note: If undo_transform=False then im_h and im_w are allowed to be None.
     """
@@ -146,17 +145,17 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
         h, w, _ = img.shape
 
     with timer.env('Postprocess'):
-        save = cfg.rescore_bbox
-        cfg.rescore_bbox = True
-        t = postprocess(dets_out, w, h, visualize_lincomb = args.display_lincomb,
+        save = cfg['rescore_bbox']
+        cfg['rescore_bbox'] = True
+        t = postprocess(cfg, dets_out, w, h, visualize_lincomb = args.display_lincomb,
                                         crop_masks        = args.crop,
                                         score_threshold   = args.score_threshold)
-        cfg.rescore_bbox = save
+        cfg['rescore_bbox'] = save
 
     with timer.env('Copy'):
         idx = t[1].argsort(0, descending=True)[:args.top_k]
 
-        if cfg.eval_mask_branch:
+        if cfg['eval_mask_branch']:
             # Masks are drawn on the GPU, so don't copy
             masks = t[3][idx]
         classes, scores, boxes = [x[idx].cpu().numpy() for x in t[:3]]
@@ -188,7 +187,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
     # First, draw the masks on the GPU where we can do it really fast
     # Beware: very fast but possibly unintelligible mask-drawing code ahead
     # I wish I had access to OpenGL or Vulkan but alas, I guess Pytorch tensor operations will have to suffice
-    if args.display_masks and cfg.eval_mask_branch and num_dets_to_consider > 0:
+    if args.display_masks and cfg['eval_mask_branch'] and num_dets_to_consider > 0:
         # After this, mask is of size [num_dets, h, w, 1]
         masks = masks[:num_dets_to_consider, :, :, None]
 
@@ -248,7 +247,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
                 cv2.rectangle(img_numpy, (x1, y1), (x2, y2), color, 1)
 
             if args.display_text:
-                _class = cfg.dataset.class_names[classes[j]]
+                _class = cfg['dataset'].class_names[classes[j]]
                 text_str = '%s: %.2f' % (_class, score) if args.display_scores else _class
 
                 font_face = cv2.FONT_HERSHEY_DUPLEX
@@ -266,9 +265,9 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
 
     return img_numpy
 
-def prep_benchmark(dets_out, h, w):
+def prep_benchmark(cfg, dets_out, h, w):
     with timer.env('Postprocess'):
-        t = postprocess(dets_out, w, h, crop_masks=args.crop, score_threshold=args.score_threshold)
+        t = postprocess(cfg, dets_out, w, h, crop_masks=args.crop, score_threshold=args.score_threshold)
 
     with timer.env('Copy'):
         classes, scores, boxes, masks = [x[:args.top_k] for x in t]
@@ -285,26 +284,27 @@ def prep_benchmark(dets_out, h, w):
         # Just in case
         torch.cuda.synchronize()
 
-def prep_coco_cats():
+def prep_coco_cats(cfg):
     """ Prepare inverted table for category id lookup given a coco cats object. """
-    for coco_cat_id, transformed_cat_id_p1 in get_label_map().items():
+    for coco_cat_id, transformed_cat_id_p1 in get_label_map(cfg).items():
         transformed_cat_id = transformed_cat_id_p1 - 1
         coco_cats[transformed_cat_id] = coco_cat_id
         coco_cats_inv[coco_cat_id] = transformed_cat_id
 
 
 def get_coco_cat(transformed_cat_id):
-    """ transformed_cat_id is [0,80) as indices in cfg.dataset.class_names """
+    """ transformed_cat_id is [0,80) as indices in cfg['dataset'].class_names """
     return coco_cats[transformed_cat_id]
 
 def get_transformed_cat(coco_cat_id):
-    """ transformed_cat_id is [0,80) as indices in cfg.dataset.class_names """
+    """ transformed_cat_id is [0,80) as indices in cfg['dataset'].class_names """
     return coco_cats_inv[coco_cat_id]
 
 
 class Detections:
 
-    def __init__(self):
+    def __init__(self, cfg):
+        self.cfg = cfg
         self.bbox_data = []
         self.mask_data = []
 
@@ -352,7 +352,7 @@ class Detections:
 
         output = {
             'info' : {
-                'Config': {key: getattr(cfg, key) for key in config_outs},
+                'Config': {key: self.cfg[key] for key in config_outs},
             }
         }
 
@@ -368,11 +368,11 @@ class Detections:
             image_obj['dets'].append({
                 'score': bbox['score'],
                 'bbox': bbox['bbox'],
-                'category': cfg.dataset.class_names[get_transformed_cat(bbox['category_id'])],
+                'category': self.cfg['dataset'].class_names[get_transformed_cat(bbox['category_id'])],
                 'mask': mask['segmentation'],
             })
 
-        with open(os.path.join(args.web_det_path, '%s.json' % cfg.name), 'w') as f:
+        with open(os.path.join(args.web_det_path, '%s.json' % self.cfg['name']), 'w') as f:
             json.dump(output, f)
 
 
@@ -388,7 +388,7 @@ def _bbox_iou(bbox1, bbox2, iscrowd=False):
         ret = jaccard(bbox1, bbox2, iscrowd)
     return ret.cpu()
 
-def prep_metrics(ap_data, dets, img, gt, gt_masks, h, w, num_crowd, image_id, detections:Detections=None):
+def prep_metrics(cfg, ap_data, dets, img, gt, gt_masks, h, w, num_crowd, image_id, detections:Detections=None):
     """ Returns a list of APs for this image, with each element being for a class  """
     if not args.output_coco_json:
         with timer.env('Prepare gt'):
@@ -405,7 +405,7 @@ def prep_metrics(ap_data, dets, img, gt, gt_masks, h, w, num_crowd, image_id, de
                 crowd_classes, gt_classes = split(gt_classes)
 
     with timer.env('Postprocess'):
-        classes, scores, boxes, masks = postprocess(dets, w, h, crop_masks=args.crop, score_threshold=args.score_threshold)
+        classes, scores, boxes, masks = postprocess(cfg, dets, w, h, crop_masks=args.crop, score_threshold=args.score_threshold)
 
         if classes.size(0) == 0:
             return
@@ -876,10 +876,10 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
 
     cleanup_and_exit()
 
-def evaluate(net:Yolact, dataset, train_mode=False):
+def evaluate(cfg, net:Yolact, dataset, train_mode=False):
     net.detect.use_fast_nms = args.fast_nms
     net.detect.use_cross_class_nms = args.cross_class_nms
-    cfg.mask_proto_debug = args.mask_proto_debug
+    cfg['mask_proto_debug'] = args.mask_proto_debug
 
     # TODO Currently we do not support Fast Mask Re-scroing in evalimage, evalimages, and evalvideo
     if args.image is not None:
@@ -911,8 +911,8 @@ def evaluate(net:Yolact, dataset, train_mode=False):
         # For each class and iou, stores tuples (score, isPositive)
         # Index ap_data[type][iouIdx][classIdx]
         ap_data = {
-            'box' : [[APDataObject() for _ in cfg.dataset.class_names] for _ in iou_thresholds],
-            'mask': [[APDataObject() for _ in cfg.dataset.class_names] for _ in iou_thresholds]
+            'box' : [[APDataObject() for _ in cfg['dataset'].class_names] for _ in iou_thresholds],
+            'mask': [[APDataObject() for _ in cfg['dataset'].class_names] for _ in iou_thresholds]
         }
         detections = Detections()
     else:
@@ -945,7 +945,7 @@ def evaluate(net:Yolact, dataset, train_mode=False):
                 img, gt, gt_masks, h, w, num_crowd = dataset.pull_item(image_idx)
 
                 # Test flag, do not upvote
-                if cfg.mask_proto_debug:
+                if cfg['mask_proto_debug']:
                     with open('scripts/info.txt', 'w') as f:
                         f.write(str(dataset.ids[image_idx]))
                     np.save('scripts/gt.npy', gt_masks)
@@ -1012,11 +1012,11 @@ def evaluate(net:Yolact, dataset, train_mode=False):
         print('Stopping...')
 
 
-def calc_map(ap_data):
+def calc_map(cfg, ap_data):
     print('Calculating mAP...')
     aps = [{'box': [], 'mask': []} for _ in iou_thresholds]
 
-    for _class in range(len(cfg.dataset.class_names)):
+    for _class in range(len(cfg['dataset'].class_names)):
         for iou_idx in range(len(iou_thresholds)):
             for iou_type in ('box', 'mask'):
                 ap_obj = ap_data[iou_type][iou_idx][_class]

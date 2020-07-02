@@ -7,7 +7,7 @@ import numpy as np
 from numpy import random
 import torch
 
-from yolact.data import cfg, MEANS, STD
+from yolact.data import MEANS, STD
 
 
 def intersect(box_a, box_b):
@@ -138,10 +138,11 @@ class Resize(object):
         h = max_size / ratio
         return int(w), int(h)
 
-    def __init__(self, resize_gt=True):
+    def __init__(self, cfg, resize_gt=True):
+        self.cfg = cfg
         self.resize_gt = resize_gt
-        self.max_size = cfg.max_size
-        self.preserve_aspect_ratio = cfg.preserve_aspect_ratio
+        self.max_size = cfg['max_size']
+        self.preserve_aspect_ratio = cfg['preserve_aspect_ratio']
 
     def __call__(self, image, masks, boxes, labels=None):
         img_h, img_w, _ = image.shape
@@ -172,7 +173,7 @@ class Resize(object):
         w = boxes[:, 2] - boxes[:, 0]
         h = boxes[:, 3] - boxes[:, 1]
 
-        keep = (w > cfg.discard_box_width) * (h > cfg.discard_box_height)
+        keep = (w > self.cfg['discard_box_width']) * (h > self.cfg['discard_box_height'])
         masks = masks[keep]
         boxes = boxes[keep]
         labels['labels'] = labels['labels'][keep]
@@ -529,7 +530,7 @@ class PrepareMasks(object):
     """
     Prepares the gt masks for use_gt_bboxes by cropping with the gt box
     and downsampling the resulting mask to mask_size, mask_size. This
-    function doesn't do anything if cfg.use_gt_bboxes is False.
+    function doesn't do anything if cfg['use_gt_bboxes'] is False.
     """
 
     def __init__(self, mask_size, use_gt_bboxes):
@@ -602,11 +603,11 @@ class BackboneTransform(object):
 class BaseTransform(object):
     """ Transorm to be used when evaluating. """
 
-    def __init__(self, mean=MEANS, std=STD):
+    def __init__(self, cfg, mean=MEANS, std=STD):
         self.augment = Compose([
             ConvertFromInts(),
             Resize(resize_gt=False),
-            BackboneTransform(cfg.backbone.transform, mean, std, 'BGR')
+            BackboneTransform(cfg['backbone']['transform'], mean, std, 'BGR')
         ])
 
     def __call__(self, img, masks=None, boxes=None, labels=None):
@@ -621,24 +622,25 @@ class FastBaseTransform(torch.nn.Module):
     Maintain this as necessary.
     """
 
-    def __init__(self, device:str='cpu'):
+    def __init__(self, cfg, device:str='cpu'):
         super().__init__()
 
+        self.cfg = cfg
         self.mean = torch.Tensor(MEANS).float().to(device)[None, :, None, None]
         self.std  = torch.Tensor( STD ).float().to(device)[None, :, None, None]
-        self.transform = cfg.backbone.transform
+        self.transform = cfg['backbone']['transform']
 
     def forward(self, img):
         self.mean = self.mean.to(img.device)
         self.std  = self.std.to(img.device)
 
         # img assumed to be a pytorch BGR image with channel order [n, h, w, c]
-        if cfg.preserve_aspect_ratio:
+        if self.cfg['preserve_aspect_ratio']:
             _, h, w, _ = img.size()
-            img_size = Resize.calc_size_preserve_ar(w, h, cfg.max_size)
+            img_size = Resize.calc_size_preserve_ar(w, h, self.cfg['max_size'])
             img_size = (img_size[1], img_size[0]) # Pytorch needs h, w
         else:
-            img_size = (cfg.max_size, cfg.max_size)
+            img_size = (self.cfg['max_size'], self.cfg['max_size'])
 
         img = img.permute(0, 3, 1, 2).contiguous()
         img = F.interpolate(img, img_size, mode='bilinear', align_corners=False)
@@ -668,21 +670,21 @@ def enable_if(condition, obj):
 class SSDAugmentation(object):
     """ Transform to be used when training. """
 
-    def __init__(self, mean=MEANS, std=STD):
+    def __init__(self, cfg, mean=MEANS, std=STD):
         self.augment = Compose([
             ConvertFromInts(),
             ToAbsoluteCoords(),
-            enable_if(cfg.augment_photometric_distort, PhotometricDistort()),
-            enable_if(cfg.augment_expand, Expand(mean)),
-            enable_if(cfg.augment_random_sample_crop, RandomSampleCrop()),
-            enable_if(cfg.augment_random_mirror, RandomMirror()),
-            enable_if(cfg.augment_random_flip, RandomFlip()),
-            enable_if(cfg.augment_random_flip, RandomRot90()),
+            enable_if(cfg['augment_photometric_distort'], PhotometricDistort()),
+            enable_if(cfg['augment_expand'], Expand(mean)),
+            enable_if(cfg['augment_random_sample_crop'], RandomSampleCrop()),
+            enable_if(cfg['augment_random_mirror'], RandomMirror()),
+            enable_if(cfg['augment_random_flip'], RandomFlip()),
+            enable_if(cfg['augment_random_flip'], RandomRot90()),
             Resize(),
-            enable_if(not cfg.preserve_aspect_ratio, Pad(cfg.max_size, cfg.max_size, mean)),
+            enable_if(not cfg['preserve_aspect_ratio'], Pad(cfg['max_size'], cfg['max_size'], mean)),
             ToPercentCoords(),
-            PrepareMasks(cfg.mask_size, cfg.use_gt_bboxes),
-            BackboneTransform(cfg.backbone.transform, mean, std, 'BGR')
+            PrepareMasks(cfg['mask_size'], cfg['use_gt_bboxes']),
+            BackboneTransform(cfg['backbone']['transform'], mean, std, 'BGR')
         ])
 
     def __call__(self, img, masks, boxes, labels):

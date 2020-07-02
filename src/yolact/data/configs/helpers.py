@@ -1,6 +1,6 @@
 import torch
 
-mask_type = {
+mask_types = {
     # Direct produces masks directly as the output of each pred module.
     # This is denoted as fc-mask in the paper.
     # Parameters: mask_size, use_gt_bboxes

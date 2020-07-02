@@ -20,8 +20,8 @@ yolact_base_fpn.update({
     'num_downsample': 2,
 })
 
-yolact_base_config = coco_base.config.copy()
-yolact_base_config.update({
+config = coco_base.config.copy()
+config.update({
     'name': 'yolact_base',
 
     # Dataset stuff
@@ -42,7 +42,7 @@ yolact_base_config.update({
     'fpn': yolact_base_fpn,
 
     # Mask Settings
-    'mask_type': mask_type.lincomb,
+    'mask_type': mask_types.lincomb,
     'mask_alpha': 6.125,
     'mask_proto_src': 0,
     'mask_proto_net': [(256, 3, {'padding': 1})] * 3 + [(None, -2, {}), (256, 3, {'padding': 1})] + [(32, 1, {})],

@@ -146,13 +146,13 @@ By default, we train on COCO. Make sure to download the entire dataset using the
    - All weights are saved in the `./weights` directory by default with the file name `<config>_<epoch>_<iter>.pth`.
 ```Shell
 # Trains using the base config with a batch size of 8 (the default).
-python train.py --config=yolact_base_config
+python train.py --config=yolact_base
 
-# Trains yolact_base_config with a batch_size of 5. For the 550px models, 1 batch takes up around 1.5 gigs of VRAM, so specify accordingly.
-python train.py --config=yolact_base_config --batch_size=5
+# Trains yolact_base with a batch_size of 5. For the 550px models, 1 batch takes up around 1.5 gigs of VRAM, so specify accordingly.
+python train.py --config=yolact_base --batch_size=5
 
 # Resume training yolact_base with a specific weight file and start from the iteration specified in the weight file's name.
-python train.py --config=yolact_base_config --resume=weights/yolact_base_10_32100.pth --start_iter=-1
+python train.py --config=yolact_base --resume=weights/yolact_base_10_32100.pth --start_iter=-1
 
 # Use the help option to see a description of all available command line arguments
 python train.py --help
@@ -209,7 +209,7 @@ my_custom_dataset = dataset_base.copy({
  - A couple things to note:
    - Class IDs in the annotation file should start at 1 and increase sequentially on the order of `class_names`. If this isn't the case for your annotation file (like in COCO), see the field `label_map` in `dataset_base`.
    - If you do not want to create a validation split, use the same image path and annotations file for validation. By default (see `python train.py --help`), `train.py` will output validation mAP for the first 5000 images in the dataset every 2 epochs.
- - Finally, in `yolact_base_config` in the same file, change the value for `'dataset'` to `'my_custom_dataset'` or whatever you named the config object above. Then you can use any of the training commands in the previous section.
+ - Finally, in `yolact_base` in the same file, change the value for `'dataset'` to `'my_custom_dataset'` or whatever you named the config object above. Then you can use any of the training commands in the previous section.
 
 #### Creating a Custom Dataset from Scratch
 See [this nice post by @Amit12690](https://github.com/dbolya/yolact/issues/70#issuecomment-504283008) for tips on how to annotate a custom dataset and prepare it for use with YOLACT.
