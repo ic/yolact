@@ -1,6 +1,5 @@
 import torch
 
-from yolact.data import cfg
 from yolact.utils import timer
 
 @torch.jit.script
@@ -155,7 +154,7 @@ def change(gt, priors):
 
 
 
-def match(pos_thresh, neg_thresh, truths, priors, labels, crowd_boxes, loc_t, conf_t, idx_t, idx, loc_data):
+def match(cfg, pos_thresh, neg_thresh, truths, priors, labels, crowd_boxes, loc_t, conf_t, idx_t, idx, loc_data):
     """Match each prior box with the ground truth box of the highest jaccard
     overlap, encode the bounding boxes, then return the matched indices
     corresponding to both confidence and location preds.
@@ -174,10 +173,10 @@ def match(pos_thresh, neg_thresh, truths, priors, labels, crowd_boxes, loc_t, co
     Return:
         The matched indices corresponding to 1)location and 2)confidence preds.
     """
-    decoded_priors = decode(loc_data, priors, cfg.use_yolo_regressors) if cfg.use_prediction_matching else point_form(priors)
+    decoded_priors = decode(loc_data, priors, cfg['use_yolo_regressors']) if cfg['use_prediction_matching'] else point_form(priors)
 
     # Size [num_objects, num_priors]
-    overlaps = jaccard(truths, decoded_priors) if not cfg.use_change_matching else change(truths, decoded_priors)
+    overlaps = jaccard(truths, decoded_priors) if not cfg['use_change_matching'] else change(truths, decoded_priors)
 
     # Size [num_priors] best ground truth for each prior
     best_truth_overlap, best_truth_idx = overlaps.max(0)
@@ -212,15 +211,15 @@ def match(pos_thresh, neg_thresh, truths, priors, labels, crowd_boxes, loc_t, co
     conf[best_truth_overlap < neg_thresh] =  0  # label as background
 
     # Deal with crowd annotations for COCO
-    if crowd_boxes is not None and cfg.crowd_iou_threshold < 1:
+    if crowd_boxes is not None and cfg['crowd_iou_threshold'] < 1:
         # Size [num_priors, num_crowds]
         crowd_overlaps = jaccard(decoded_priors, crowd_boxes, iscrowd=True)
         # Size [num_priors]
         best_crowd_overlap, best_crowd_idx = crowd_overlaps.max(1)
         # Set non-positives with crowd iou of over the threshold to be neutral.
-        conf[(conf <= 0) & (best_crowd_overlap > cfg.crowd_iou_threshold)] = -1
+        conf[(conf <= 0) & (best_crowd_overlap > cfg['crowd_iou_threshold'])] = -1
 
-    loc = encode(matches, priors, cfg.use_yolo_regressors)
+    loc = encode(matches, priors, cfg['use_yolo_regressors'])
     loc_t[idx]  = loc    # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf   # [num_priors] top class label for each prior
     idx_t[idx]  = best_truth_idx # [num_priors] indices for lookup

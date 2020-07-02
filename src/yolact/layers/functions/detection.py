@@ -15,7 +15,8 @@ class Detect(object):
     """
     # TODO: Refactor this whole class away. It needs to go.
 
-    def __init__(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh):
+    def __init__(self, cfg, num_classes, bkg_label, top_k, conf_thresh, nms_thresh):
+        self.cfg = cfg
         self.num_classes = num_classes
         self.background_label = bkg_label
         self.top_k = top_k
@@ -167,10 +168,10 @@ class Detect(object):
         masks = masks[keep]
         scores = scores[keep]
 
-        # Only keep the top cfg.max_num_detections highest scores across all classes
+        # Only keep the top cfg['max_num_detections'] highest scores across all classes
         scores, idx = scores.sort(0, descending=True)
-        idx = idx[:cfg.max_num_detections]
-        scores = scores[:cfg.max_num_detections]
+        idx = idx[:self.cfg['max_num_detections']]
+        scores = scores[:self.cfg['max_num_detections']]
 
         classes = classes[idx]
         boxes = boxes[idx]
@@ -191,7 +192,7 @@ class Detect(object):
         scr_lst = []
 
         # Multiplying by max_size is necessary because of how cnms computes its area and intersections
-        boxes = boxes * cfg.max_size
+        boxes = boxes * self.cfg['max_size']
 
         for _cls in range(num_classes):
             cls_scores = scores[_cls, :]
@@ -217,11 +218,11 @@ class Detect(object):
         scores  = torch.cat(scr_lst, dim=0)
 
         scores, idx2 = scores.sort(0, descending=True)
-        idx2 = idx2[:cfg.max_num_detections]
-        scores = scores[:cfg.max_num_detections]
+        idx2 = idx2[:self.cfg['max_num_detections']]
+        scores = scores[:self.cfg['max_num_detections']]
 
         idx = idx[idx2]
         classes = classes[idx2]
 
         # Undo the multiplication above
-        return boxes[idx] / cfg.max_size, masks[idx], classes, scores
+        return boxes[idx] / self.cfg['max_size'], masks[idx], classes, scores
