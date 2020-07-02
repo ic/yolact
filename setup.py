@@ -5,7 +5,6 @@ setup(
     author_email='',
     description='',
     install_requires=[
-        'python~=3.7.0',
         'cython~=0.29.17',
         'opencv-python~=4.2.0',
         'pillow~=6.2.2',
