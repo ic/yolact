@@ -143,12 +143,10 @@ class PredictionModule(nn.Module):
         self.mask_proto_split_prototypes_by_head = self.cfg['mask_proto_split_prototypes_by_head']
         self.use_mask_scoring = self.cfg['use_mask_scoring']
         self.use_instance_coeff = self.cfg['use_instance_coeff']
-        self._tmp_img_w = self.cfg['_tmp_img_w']
-        self._tmp_img_h = self.cfg['_tmp_img_h']
         self.backbone = self.cfg['backbone']
 
 
-    def forward(self, x):
+    def forward(self, x, img_h, img_w):
         """
         Args:
             - x: The convOut from a layer in the backbone network
@@ -217,7 +215,7 @@ class PredictionModule(nn.Module):
         if self.mask_proto_split_prototypes_by_head and self.mask_type == mask_types['lincomb']:
             mask = F.pad(mask, (self.index * self.mask_dim, (self.num_heads - self.index - 1) * self.mask_dim), mode='constant', value=0)
 
-        priors = self.make_priors(conv_h, conv_w, x.device)
+        priors = self.make_priors(conv_h, conv_w, x.device, img_h, img_w)
 
         preds = { 'loc': bbox, 'conf': conf, 'mask': mask, 'priors': priors }
 
@@ -229,12 +227,12 @@ class PredictionModule(nn.Module):
 
         return preds
 
-    def make_priors(self, conv_h, conv_w, device):
+    def make_priors(self, conv_h, conv_w, device, img_h, img_w):
         """ Note that priors are [x,y,width,height] where (x,y) is the center of the box. """
         global prior_cache
         size = (conv_h, conv_w)
 
-        if self.last_img_size != (self._tmp_img_w, self._tmp_img_h):
+        if self.last_img_size != (img_w, img_h):
             prior_data = []
 
             # Iteration order is important (it has to sync up with the convout)
@@ -264,7 +262,7 @@ class PredictionModule(nn.Module):
 
             self.priors = torch.Tensor(prior_data, device=device).view(-1, 4).detach()
             self.priors.requires_grad = False
-            self.last_img_size = (self._tmp_img_w, self._tmp_img_h)
+            self.last_img_size = (img_w, img_h)
             self.last_conv_size = (conv_w, conv_h)
             prior_cache[size] = None
         elif self.priors.device != device:
@@ -493,6 +491,26 @@ class Yolact(nn.Module):
         self.detect = Detect(self.cfg, self.cfg['num_classes'], bkg_label=0, top_k=self.cfg['nms_top_k'],
             conf_thresh=self.cfg['nms_conf_thresh'], nms_thresh=self.cfg['nms_thresh'])
 
+        # For TorchScript
+        self.backbone = self.cfg['backbone']
+        self.eval_mask_branch = self.cfg['eval_mask_branch']
+        self.fpn = self.cfg['fpn']
+        self.mask_proto_bias self.cfg['mask_proto_bias']
+        self.mask_proto_prototype_activation = self.cfg['mask_proto_prototype_activation']
+        self.mask_proto_prototypes_as_features = self.cfg['mask_proto_prototypes_as_features']
+        self.mask_proto_prototypes_as_features_no_grad = self.cfg['mask_proto_prototypes_as_features_no_grad']
+        self.mask_type = self.cfg['mask_type']
+        self.share_prediction_module = self.cfg['share_prediction_module']
+        self.use_class_existence_loss = self.cfg['use_class_existence_loss']
+        self.use_focal_loss = self.cfg['use_focal_loss']
+        self.use_instance_coeff = self.cfg['use_instance_coeff']
+        self.use_mask_scoring = self.cfg['use_mask_scoring']
+        self.use_objectness_score = self.cfg['use_objectness_score']
+        self.use_semantic_segmentation_loss = self.cfg['use_semantic_segmentation_loss']
+        self.use_sigmoid_focal_loss = self.cfg['use_sigmoid_focal_loss']
+        self.focal_loss_init_pi = self.cfg['focal_loss_init_pi']
+
+
     def save_weights(self, path):
         """ Saves the model's weights using compression because the file sizes were getting too big. """
         torch.save(self.state_dict(), path)
@@ -508,7 +526,7 @@ class Yolact(nn.Module):
 
             # Also for backward compatibility with v1.0 weights, do this check
             if key.startswith('fpn.downsample_layers.'):
-                if self.cfg['fpn'] is not None and int(key.split('.')[2]) >= self.cfg['fpn']['num_downsample']:
+                if self.fpn is not None and int(key.split('.')[2]) >= self.fpn['num_downsample']:
                     del state_dict[key]
         self.load_state_dict(state_dict)
 
@@ -549,8 +567,8 @@ class Yolact(nn.Module):
                 nn.init.xavier_uniform_(module.weight.data)
 
                 if module.bias is not None:
-                    if self.cfg['use_focal_loss'] and 'conf_layer' in name:
-                        if not self.cfg['use_sigmoid_focal_loss']:
+                    if self.use_focal_loss and 'conf_layer' in name:
+                        if not self.use_sigmoid_focal_loss:
                             # Initialize the last layer as in the focal loss paper.
                             # Because we use softmax and not sigmoid, I had to derive an alternate expression
                             # on a notecard. Define pi to be the probability of outputting a foreground detection.
@@ -561,11 +579,11 @@ class Yolact(nn.Module):
                             # For simplicity (and because we have a degree of freedom here), set z = 1. Then we have
                             #   x_0 =  log((1 - pi) / pi)       note: don't split up the log for numerical stability
                             #   x_i = -log(c)                   for all i > 0
-                            module.bias.data[0]  = np.log((1 - self.cfg['focal_loss_init_pi']) / self.cfg['focal_loss_init_pi'])
+                            module.bias.data[0]  = np.log((1 - self.focal_loss_init_pi) / self.focal_loss_init_pi)
                             module.bias.data[1:] = -np.log(module.bias.size(0) - 1)
                         else:
-                            module.bias.data[0]  = -np.log(self.cfg['focal_loss_init_pi'] / (1 - self.cfg['focal_loss_init_pi']))
-                            module.bias.data[1:] = -np.log((1 - self.cfg['focal_loss_init_pi']) / self.cfg['focal_loss_init_pi'])
+                            module.bias.data[0]  = -np.log(self.focal_loss_init_pi / (1 - self.focal_loss_init_pi))
+                            module.bias.data[1:] = -np.log((1 - self.focal_loss_init_pi) / self.focal_loss_init_pi)
                     else:
                         module.bias.data.zero_()
 
@@ -587,8 +605,6 @@ class Yolact(nn.Module):
     def forward(self, x):
         """ The input should be of size [batch_size, 3, img_h, img_w] """
         _, _, img_h, img_w = x.size()
-        self.cfg['_tmp_img_h'] = img_h
-        self.cfg['_tmp_img_w'] = img_w
 
         outs = self.backbone(x)
 
@@ -644,7 +660,7 @@ class Yolact(nn.Module):
             if self.cfg['share_prediction_module'] and pred_layer is not self.prediction_layers[0]:
                 pred_layer.parent = [self.prediction_layers[0]]
 
-            p = pred_layer(pred_x)
+            p = pred_layer(pred_x, img_h, img_w)
 
             for k, v in p.items():
                 pred_outs[k].append(v)
