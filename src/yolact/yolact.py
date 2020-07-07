@@ -492,7 +492,7 @@ class Yolact(nn.Module):
         self.backbone = cfg['backbone']
         self.eval_mask_branch = cfg['eval_mask_branch']
         self.fpn = cfg['fpn']
-        self.mask_proto_bias cfg['mask_proto_bias']
+        self.mask_proto_bias = cfg['mask_proto_bias']
         self.mask_proto_prototype_activation = cfg['mask_proto_prototype_activation']
         self.mask_proto_prototypes_as_features = cfg['mask_proto_prototypes_as_features']
         self.mask_proto_prototypes_as_features_no_grad = cfg['mask_proto_prototypes_as_features_no_grad']
