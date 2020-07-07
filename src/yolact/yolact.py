@@ -130,6 +130,24 @@ class PredictionModule(nn.Module):
         self.last_conv_size = None
         self.last_img_size = None
 
+        # Extract from config so Torch scripting works
+        self.extra_head_net = self.cfg['extra_head_net']
+        self.use_prediction_module = self.cfg['use_prediction_module']
+        self.eval_mask_branch = self.cfg['eval_mask_branch']
+        self.use_mask_scoring = self.cfg['use_mask_scoring']
+        self.use_instance_coeff = self.cfg['use_instance_coeff']
+        self.use_yolo_regressors = self.cfg['use_yolo_regressors']
+        self.mask_type = self.cfg['mask_type']
+        self.mask_proto_coeff_activation = self.cfg['mask_proto_coeff_activation']
+        self.mask_proto_coeff_gate = self.cfg['mask_proto_coeff_gate']
+        self.mask_proto_split_prototypes_by_head = self.cfg['mask_proto_split_prototypes_by_head']
+        self.use_mask_scoring = self.cfg['use_mask_scoring']
+        self.use_instance_coeff = self.cfg['use_instance_coeff']
+        self._tmp_img_w = self.cfg['_tmp_img_w']
+        self._tmp_img_h = self.cfg['_tmp_img_h']
+        self.backbone = self.cfg['backbone']
+
+
     def forward(self, x):
         """
         Args:
@@ -148,10 +166,10 @@ class PredictionModule(nn.Module):
         conv_h = x.size(2)
         conv_w = x.size(3)
 
-        if self.cfg['extra_head_net'] is not None:
+        if self.extra_head_net is not None:
             x = src.upfeature(x)
 
-        if self.cfg['use_prediction_module']:
+        if self.use_prediction_module:
             # The two branches of PM design (c)
             a = src.block(x)
 
@@ -169,44 +187,44 @@ class PredictionModule(nn.Module):
         bbox = src.bbox_layer(bbox_x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, 4)
         conf = src.conf_layer(conf_x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.num_classes)
 
-        if self.cfg['eval_mask_branch']:
+        if self.eval_mask_branch:
             mask = src.mask_layer(mask_x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.mask_dim)
         else:
             mask = torch.zeros(x.size(0), bbox.size(1), self.mask_dim, device=bbox.device)
 
-        if self.cfg['use_mask_scoring']:
+        if self.use_mask_scoring:
             score = src.score_layer(x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, 1)
 
-        if self.cfg['use_instance_coeff']:
-            inst = src.inst_layer(x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.cfg['num_instance_coeffs'])
+        if self.use_instance_coeffs:
+            inst = src.inst_layer(x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.num_instance_coeffs)
 
         # See box_utils.decode for an explanation of this
-        if self.cfg['use_yolo_regressors']:
+        if self.use_yolo_regressors:
             bbox[:, :, :2] = torch.sigmoid(bbox[:, :, :2]) - 0.5
             bbox[:, :, 0] /= conv_w
             bbox[:, :, 1] /= conv_h
 
-        if self.cfg['eval_mask_branch']:
-            if self.cfg['mask_type'] == mask_types['direct']:
+        if self.eval_mask_branch:
+            if self.mask_type == mask_types['direct']:
                 mask = torch.sigmoid(mask)
-            elif self.cfg['mask_type'] == mask_types['lincomb']:
-                mask = self.cfg['mask_proto_coeff_activation'](mask)
+            elif self.mask_type == mask_types['lincomb']:
+                mask = self.mask_proto_coeff_activation(mask)
 
-                if self.cfg['mask_proto_coeff_gate']:
+                if self.mask_proto_coeff_gate:
                     gate = src.gate_layer(x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.mask_dim)
                     mask = mask * torch.sigmoid(gate)
 
-        if self.cfg['mask_proto_split_prototypes_by_head'] and self.cfg['mask_type'] == mask_types['lincomb']:
+        if self.mask_proto_split_prototypes_by_head and self.mask_type == mask_types['lincomb']:
             mask = F.pad(mask, (self.index * self.mask_dim, (self.num_heads - self.index - 1) * self.mask_dim), mode='constant', value=0)
 
         priors = self.make_priors(conv_h, conv_w, x.device)
 
         preds = { 'loc': bbox, 'conf': conf, 'mask': mask, 'priors': priors }
 
-        if self.cfg['use_mask_scoring']:
+        if self.use_mask_scoring:
             preds['score'] = score
 
-        if self.cfg['use_instance_coeff']:
+        if self.use_instance_coeff:
             preds['inst'] = inst
 
         return preds
@@ -216,7 +234,7 @@ class PredictionModule(nn.Module):
         global prior_cache
         size = (conv_h, conv_w)
 
-        if self.last_img_size != (self.cfg['_tmp_img_w'], self.cfg['_tmp_img_h']):
+        if self.last_img_size != (self._tmp_img_w, self._tmp_img_h):
             prior_data = []
 
             # Iteration order is important (it has to sync up with the convout)
@@ -228,10 +246,10 @@ class PredictionModule(nn.Module):
                 for ars in self.aspect_ratios:
                     for scale in self.scales:
                         for ar in ars:
-                            if not self.cfg['backbone']['preapply_sqrt']:
+                            if not self.backbone['preapply_sqrt']:
                                 ar = sqrt(ar)
 
-                            if self.cfg['backbone']['use_pixel_scales']:
+                            if self.backbone['use_pixel_scales']:
                                 w = scale * ar / self.cfg['max_size']
                                 h = scale / ar / self.cfg['max_size']
                             else:
@@ -239,14 +257,14 @@ class PredictionModule(nn.Module):
                                 h = scale / ar / conv_h
 
                             # This is for backward compatability with a bug where I made everything square by accident
-                            if self.cfg['backbone']['use_square_anchors']:
+                            if self.backbone['use_square_anchors']:
                                 h = w
 
                             prior_data += [x, y, w, h]
 
             self.priors = torch.Tensor(prior_data, device=device).view(-1, 4).detach()
             self.priors.requires_grad = False
-            self.last_img_size = (self.cfg['_tmp_img_w'], self.cfg['_tmp_img_h'])
+            self.last_img_size = (self._tmp_img_w, self._tmp_img_h)
             self.last_conv_size = (conv_w, conv_h)
             prior_cache[size] = None
         elif self.priors.device != device:
