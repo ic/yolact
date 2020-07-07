@@ -77,7 +77,7 @@ class MultiBoxLoss(nn.Module):
         mask_data = predictions['mask']
         priors    = predictions['priors']
 
-        if self.cfg['mask_type'] == mask_types.lincomb:
+        if self.cfg['mask_type'] == mask_types['lincomb']:
             proto_data = predictions['proto']
 
         score_data = predictions['score'] if self.cfg['use_mask_scoring']   else None
@@ -147,7 +147,7 @@ class MultiBoxLoss(nn.Module):
             losses['B'] = F.smooth_l1_loss(loc_p, loc_t, reduction='sum') * self.cfg['bbox_alpha']
 
         if self.cfg['train_masks']:
-            if self.cfg['mask_type'] == mask_types.direct:
+            if self.cfg['mask_type'] == mask_types['direct']:
                 if self.cfg['use_gt_bboxes']:
                     pos_masks = []
                     for idx in range(batch_size):
@@ -157,7 +157,7 @@ class MultiBoxLoss(nn.Module):
                     losses['M'] = F.binary_cross_entropy(torch.clamp(masks_p, 0, 1), masks_t, reduction='sum') * self.cfg['mask_alpha']
                 else:
                     losses['M'] = self.direct_mask_loss(pos_idx, idx_t, loc_data, mask_data, priors, masks)
-            elif self.cfg['mask_type'] == mask_types.lincomb:
+            elif self.cfg['mask_type'] == mask_types['lincomb']:
                 ret = self.lincomb_mask_loss(pos, idx_t, loc_data, mask_data, priors, proto_data, masks, gt_box_t, score_data, inst_data, labels)
                 if self.cfg['use_maskiou']:
                     loss, maskiou_targets = ret
