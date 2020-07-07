@@ -1,5 +1,5 @@
 from yolact.data.configs.yolact_base import config as base
-from yolact.data.configs.backbones import darknet53_backbone, resnet50_backbone.copy
+from yolact.data.configs.backbones import darknet53_backbone, resnet50_backbone
 from yolact.data.configs.datasets import pascal_sbd_dataset
 
 yolact_im400_backbone = base['backbone'].copy()
