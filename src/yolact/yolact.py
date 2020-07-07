@@ -472,7 +472,7 @@ class Yolact(nn.Module):
             self.semantic_seg_conv = nn.Conv2d(src_channels[0], self.cfg['num_classes']-1, kernel_size=1)
 
         # For use in evaluation
-        self.detect = Detect(self.cfg['num_classes'], bkg_label=0, top_k=self.cfg['nms_top_k'],
+        self.detect = Detect(self.cfg, self.cfg['num_classes'], bkg_label=0, top_k=self.cfg['nms_top_k'],
             conf_thresh=self.cfg['nms_conf_thresh'], nms_thresh=self.cfg['nms_thresh'])
 
     def save_weights(self, path):
