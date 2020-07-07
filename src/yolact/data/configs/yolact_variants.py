@@ -20,7 +20,8 @@ yolact_im700_backbone.update({
     'pred_scales': [[int(x[0] / base['max_size'] * 700)] for x in base['backbone']['pred_scales']],
 })
 
-yolact_im700_config = base.copy({
+yolact_im700_config = base.copy()
+yolact_im700_config.update({
     'name': 'yolact_im700',
     'masks_to_train': 300,
     'max_size': 700,
@@ -38,7 +39,8 @@ yolact_darknet53_backbone.update({
     'use_square_anchors': True, # This is for backward compatability with a bug
 })
 
-yolact_darknet53_config = base.copy({
+yolact_darknet53_config = base.copy()
+yolact_darknet53_config.update({
     'name': 'yolact_darknet53',
     'backbone': yolact_darknet53_backbone,
 })
