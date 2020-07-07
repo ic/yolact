@@ -84,10 +84,12 @@ class PredictionModule(nn.Module):
         if cfg['mask_proto_prototypes_as_features']:
             in_channels += self.mask_dim
 
+        # Set default, for TorchScript
+        self.upfeature = nn.Identity()
+
         if parent is None:
             if cfg['extra_head_net'] is None:
                 out_channels = in_channels
-                self.upfeature = nn.Identity()
             else:
                 self.upfeature, out_channels = make_net(in_channels, cfg['extra_head_net'])
 
