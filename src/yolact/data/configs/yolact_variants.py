@@ -56,7 +56,8 @@ yolact_resnet50_backbone.update({
     'use_square_anchors': True, # This is for backward compatability with a bug
 })
 
-yolact_resnet50_config = base.copy({
+yolact_resnet50_config = base.copy()
+yolact_resnet50_config.update({
     'name': 'yolact_resnet50',
     'backbone': yolact_resnet50_backbone,
 })
