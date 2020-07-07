@@ -489,7 +489,7 @@ class Yolact(nn.Module):
             conf_thresh=cfg['nms_conf_thresh'], nms_thresh=cfg['nms_thresh'])
 
         # For TorchScript
-        self.backbone = cfg['backbone']
+        self.backbone_config = cfg['backbone']
         self.eval_mask_branch = cfg['eval_mask_branch']
         self.fpn = cfg['fpn']
         self.mask_proto_bias = cfg['mask_proto_bias']
@@ -608,7 +608,7 @@ class Yolact(nn.Module):
 
         if self.fpn is not None:
             # Use backbone.selected_layers because we overwrote self.selected_layers
-            outs = [outs[i] for i in self.backbone['selected_layers']]
+            outs = [outs[i] for i in self.backbone_config['selected_layers']]
             outs = self.fpn(outs)
 
         proto_out = None
