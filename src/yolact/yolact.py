@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torchvision.models.resnet import Bottleneck
 
 from yolact.backbone import construct_backbone
-from yolact.data.config.helpers import mask_types
+from yolact.data.configs.helpers import mask_types
 from yolact.layers import Detect
 from yolact.layers.interpolate import InterpolateModule
 from yolact.utils.functions import MovingAverage, make_net
