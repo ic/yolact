@@ -80,7 +80,7 @@ class PredictionModule(nn.Module):
         self.index       = index
         self.num_heads   = self.cfg['num_heads'] # Defined by Yolact
 
-        if self.cfg['mask_proto_split_prototypes_by_head'] and self.cfg['mask_type'] == mask_types.lincomb:
+        if self.cfg['mask_proto_split_prototypes_by_head'] and self.cfg['mask_type'] == mask_types['lincomb']:
             self.mask_dim = self.mask_dim // self.num_heads
 
         if self.cfg['mask_proto_prototypes_as_features']:
@@ -120,7 +120,7 @@ class PredictionModule(nn.Module):
 
             self.bbox_extra, self.conf_extra, self.mask_extra = [make_extra(x) for x in self.cfg['extra_layers']]
 
-            if self.cfg['mask_type'] == mask_types.lincomb and self.cfg['mask_proto_coeff_gate']:
+            if self.cfg['mask_type'] == mask_types['lincomb'] and self.cfg['mask_proto_coeff_gate']:
                 self.gate_layer = nn.Conv2d(out_channels, self.num_priors * self.mask_dim, kernel_size=3, padding=1)
 
         self.aspect_ratios = aspect_ratios
@@ -187,16 +187,16 @@ class PredictionModule(nn.Module):
             bbox[:, :, 1] /= conv_h
 
         if self.cfg['eval_mask_branch']:
-            if self.cfg['mask_type'] == mask_types.direct:
+            if self.cfg['mask_type'] == mask_types['direct']:
                 mask = torch.sigmoid(mask)
-            elif self.cfg['mask_type'] == mask_types.lincomb:
+            elif self.cfg['mask_type'] == mask_types['lincomb']:
                 mask = self.cfg['mask_proto_coeff_activation'](mask)
 
                 if self.cfg['mask_proto_coeff_gate']:
                     gate = src.gate_layer(x).permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.mask_dim)
                     mask = mask * torch.sigmoid(gate)
 
-        if self.cfg['mask_proto_split_prototypes_by_head'] and self.cfg['mask_type'] == mask_types.lincomb:
+        if self.cfg['mask_proto_split_prototypes_by_head'] and self.cfg['mask_type'] == mask_types['lincomb']:
             mask = F.pad(mask, (self.index * self.mask_dim, (self.num_heads - self.index - 1) * self.mask_dim), mode='constant', value=0)
 
         priors = self.make_priors(conv_h, conv_w, x.device)
@@ -410,9 +410,9 @@ class Yolact(nn.Module):
             self.freeze_bn()
 
         # Compute mask_dim here and add it back to the config. Make sure Yolact's constructor is called early!
-        if self.cfg['mask_type'] == mask_types.direct:
+        if self.cfg['mask_type'] == mask_types['direct']:
             self.cfg['mask_dim'] = self.cfg['mask_size']**2
-        elif self.cfg['mask_type'] == mask_types.lincomb:
+        elif self.cfg['mask_type'] == mask_types['lincomb']:
             if self.cfg['mask_proto_use_grid']:
                 self.grid = torch.Tensor(np.load(self.cfg['mask_proto_grid_file']))
                 self.num_grids = self.grid.size(0)
@@ -580,7 +580,7 @@ class Yolact(nn.Module):
             outs = self.fpn(outs)
 
         proto_out = None
-        if self.cfg['mask_type'] == mask_types.lincomb and self.cfg['eval_mask_branch']:
+        if self.cfg['mask_type'] == mask_types['lincomb'] and self.cfg['eval_mask_branch']:
             proto_x = x if self.proto_src is None else outs[self.proto_src]
 
             if self.num_grids > 0:
@@ -617,7 +617,7 @@ class Yolact(nn.Module):
         for idx, pred_layer in zip(self.selected_layers, self.prediction_layers):
             pred_x = outs[idx]
 
-            if self.cfg['mask_type'] == mask_types.lincomb and self.cfg['mask_proto_prototypes_as_features']:
+            if self.cfg['mask_type'] == mask_types['lincomb'] and self.cfg['mask_proto_prototypes_as_features']:
                 # Scale the prototypes down to the current prediction layer's size and add it as inputs
                 proto_downsampled = F.interpolate(proto_downsampled, size=outs[idx].size()[2:], mode='bilinear', align_corners=False)
                 pred_x = torch.cat([pred_x, proto_downsampled], dim=1)
