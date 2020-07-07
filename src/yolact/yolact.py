@@ -85,13 +85,13 @@ class PredictionModule(nn.Module):
             in_channels += self.mask_dim
 
         # Set default, for TorchScript
-        self.upfeature = nn.Identity()
+        self.upfeature_fn = nn.Identity()
 
         if parent is None:
             if cfg['extra_head_net'] is None:
                 out_channels = in_channels
             else:
-                self.upfeature, out_channels = make_net(in_channels, cfg['extra_head_net'])
+                self.upfeature_fn, out_channels = make_net(in_channels, cfg['extra_head_net'])
 
             if cfg['use_prediction_module']:
                 self.block = Bottleneck(out_channels, out_channels // 4)
@@ -146,6 +146,10 @@ class PredictionModule(nn.Module):
         self.use_mask_scoring = cfg['use_mask_scoring']
         self.use_prediction_module = cfg['use_prediction_module']
         self.use_yolo_regressors = cfg['use_yolo_regressors']
+
+
+    def upfeature(self, x):
+        return self.upfeature_fn(x)
 
 
     def forward(self, x, img_h, img_w):
