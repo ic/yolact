@@ -173,7 +173,7 @@ def display_lincomb(proto_data, masks):
                     running_total += proto_data[:, :, idx[i]].cpu().numpy() * coeffs_sort[i]
 
                 running_total_nonlin = running_total
-                if cfg['mask_proto_mask_activation'] == activation_func.sigmoid:
+                if cfg['mask_proto_mask_activation'] == activation_func['sigmoid']:
                     running_total_nonlin = (1/(1+np.exp(-running_total_nonlin)))
 
                 arr_img[y*proto_h:(y+1)*proto_h, x*proto_w:(x+1)*proto_w] = (proto_data[:, :, idx[i]] / torch.max(proto_data[:, :, idx[i]])).cpu().numpy() * coeffs_sort[i]

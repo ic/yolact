@@ -593,7 +593,7 @@ class MultiBoxLoss(nn.Module):
             pred_masks = self.cfg['mask_proto_mask_activation'](pred_masks)
 
             if self.cfg['mask_proto_double_loss']:
-                if self.cfg['mask_proto_mask_activation'] == activation_func.sigmoid:
+                if self.cfg['mask_proto_mask_activation'] == activation_func['sigmoid']:
                     pre_loss = F.binary_cross_entropy(torch.clamp(pred_masks, 0, 1), mask_t, reduction='sum')
                 else:
                     pre_loss = F.smooth_l1_loss(pred_masks, mask_t, reduction='sum')
@@ -603,7 +603,7 @@ class MultiBoxLoss(nn.Module):
             if self.cfg['mask_proto_crop']:
                 pred_masks = crop(pred_masks, pos_gt_box_t)
 
-            if self.cfg['mask_proto_mask_activation'] == activation_func.sigmoid:
+            if self.cfg['mask_proto_mask_activation'] == activation_func['sigmoid']:
                 pre_loss = F.binary_cross_entropy(torch.clamp(pred_masks, 0, 1), mask_t, reduction='none')
             else:
                 pre_loss = F.smooth_l1_loss(pred_masks, mask_t, reduction='none')
