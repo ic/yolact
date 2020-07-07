@@ -491,7 +491,7 @@ class Yolact(nn.Module):
         # For TorchScript
         self.backbone_config = cfg['backbone']
         self.eval_mask_branch = cfg['eval_mask_branch']
-        self.fpn = cfg['fpn']
+        self.fpn_config = cfg['fpn']
         self.mask_proto_bias = cfg['mask_proto_bias']
         self.mask_proto_prototype_activation = cfg['mask_proto_prototype_activation']
         self.mask_proto_prototypes_as_features = cfg['mask_proto_prototypes_as_features']
@@ -524,7 +524,7 @@ class Yolact(nn.Module):
 
             # Also for backward compatibility with v1.0 weights, do this check
             if key.startswith('fpn.downsample_layers.'):
-                if self.fpn is not None and int(key.split('.')[2]) >= self.fpn['num_downsample']:
+                if self.fpn_config is not None and int(key.split('.')[2]) >= self.fpn_config['num_downsample']:
                     del state_dict[key]
         self.load_state_dict(state_dict)
 
