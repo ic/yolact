@@ -811,16 +811,20 @@ yolact_plus_resnet50_config = yolact_plus_base_config.copy({
 # Default config
 cfg = yolact_base_config.copy()
 
-def set_cfg(config_name:str):
+def set_cfg(config_or_name):
     """ Sets the active config. Works even if cfg is already imported! """
     global cfg
 
     # Note this is not just an eval because I'm lazy, but also because it can
     # be used like ssd300_config.copy({'max_size': 400}) for extreme fine-tuning
-    cfg.replace(eval(config_name))
+    if isinstance(config_or_name, str):
+        _config = eval(config_or_name)
+    else:
+        _config = config_or_name
+    cfg.replace(_config)
 
-    if cfg.name is None:
-        cfg.name = config_name.split('_config')[0]
+    if cfg.name is None and isinstance(config_or_name, str):
+        cfg.name = config_or_name.split('_config')[0]
 
 def set_dataset(dataset_name:str):
     """ Sets the dataset of the current config. """
